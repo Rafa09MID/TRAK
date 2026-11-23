@@ -113,6 +113,10 @@ class NotifyPayload(BaseModel):
     text: str = ""
     beep: str = "none"
 
+class WifiConfigPayload(BaseModel):
+    ssid: str
+    password: str
+
 def _notificar_esp32(text: str = "", beep: str = "none"):
     try:
         requests.post(f"{ESP32_URL}/api/notify", params={"text": text, "beep": beep}, timeout=1.5)
@@ -387,6 +391,37 @@ def proxy_rect():
 def proxy_notify(payload: NotifyPayload):
     _notificar_esp32(payload.text, payload.beep)
     return {"sent": True, "text": payload.text, "beep": payload.beep}
+
+@app.post("/api/esp32/wifi_config")
+def proxy_wifi_config(payload: WifiConfigPayload):
+    try:
+        res = requests.post(
+            f"{ESP32_URL}/api/wifi_config",
+            params={"ssid": payload.ssid, "pass": payload.password},
+            timeout=3
+        )
+        return res.json()
+    except Exception as e:
+        return {"error": f"No se pudo comunicar con ESP32: {str(e)}"}
+
+@app.get("/api/server_info")
+def server_info():
+    import socket
+    hostname = socket.gethostname()
+    ips = []
+    try:
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except Exception:
+        pass
+    return {
+        "hostname": hostname,
+        "mdns_url": f"https://{hostname}.local:8443",
+        "urls": [f"https://{ip}:8443" for ip in ips],
+        "esp32_url": auto_detect_esp32()
+    }
 
 @app.post("/api/save_safe_area")
 def save_safe_area(corners: SafeAreaCorners):

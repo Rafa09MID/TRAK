@@ -373,6 +373,7 @@
         <div class="segmented-control">
             <button class="seg-btn active" id="tabCalibrar" onclick="cambiarVista('calibrar')">Calibrar</button>
             <button class="seg-btn" id="tabControl" onclick="cambiarVista('control')">Area Segura</button>
+            <button class="seg-btn" id="tabAjustes" onclick="cambiarVista('ajustes')">Ajustes</button>
         </div>
     </header>
 
@@ -544,7 +545,40 @@
             </div>
 
             <div class="esp-link">
-                Web local del dispositivo: <a href="http://192.168.68.107" target="_blank">192.168.68.107</a>
+                Web local del dispositivo: <a href="http://esp32-laser.local" target="_blank">esp32-laser.local</a>
+            </div>
+        </div>
+
+        <!-- VISTA 3: AJUSTES Y CONFIGURACIÓN -->
+        <div id="viewAjustes" style="display:none; flex-direction:column; gap:12px;">
+            <div class="card">
+                <div class="id-header" style="margin-bottom:8px;">
+                    <span class="id-title" style="color:var(--text);">Enlaces de Conexion</span>
+                    <span class="id-model" id="infoEspStatus">Verificando...</span>
+                </div>
+                <p class="id-desc" id="infoServerLinks" style="font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">Cargando enlaces...</p>
+            </div>
+
+            <div class="card">
+                <div class="id-header" style="margin-bottom:10px;">
+                    <span class="id-title" style="color:var(--blue);">Wi-Fi del ESP32 (Hotspot Celular)</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+                    <input type="text" id="cfgWifiSsid" class="cmd-input" placeholder="Nombre de red (SSID)" value="rafa">
+                    <input type="text" id="cfgWifiPass" class="cmd-input" placeholder="Contraseña Wi-Fi" value="12345678">
+                </div>
+                <button class="btn btn-blue btn-full" onclick="guardarWifiESP32()">Guardar Wi-Fi en ESP32</button>
+            </div>
+
+            <div class="card">
+                <div class="id-header" style="margin-bottom:10px;">
+                    <span class="id-title" style="color:var(--text);">Prueba de Hardware</span>
+                </div>
+                <div class="action-grid">
+                    <button class="btn" onclick="notificarESP32('Prueba OLED OK', 'detect')">Probar OLED + Buzzer</button>
+                    <button class="btn" onclick="moverServos(90, 90, 200)">Centrar 90° / 90°</button>
+                    <button class="btn btn-full" onclick="localStorage.removeItem('trak_lens_id'); alert('Lente reiniciado.');">Reiniciar Lente Guardado</button>
+                </div>
             </div>
         </div>
     </main>
@@ -572,10 +606,47 @@
         function cambiarVista(vista) {
             document.getElementById('viewCalibrar').style.display = vista === 'calibrar' ? 'flex' : 'none';
             document.getElementById('viewControl').style.display = vista === 'control' ? 'flex' : 'none';
+            document.getElementById('viewAjustes').style.display = vista === 'ajustes' ? 'flex' : 'none';
             document.getElementById('tabCalibrar').classList.toggle('active', vista === 'calibrar');
             document.getElementById('tabControl').classList.toggle('active', vista === 'control');
+            document.getElementById('tabAjustes').classList.toggle('active', vista === 'ajustes');
             if (vista === 'control') cargarEstadoESP32();
+            else if (vista === 'ajustes') cargarAjustes();
             else setTimeout(ajustarCanvas, 50);
+        }
+
+        async function cargarAjustes() {
+            try {
+                const info = await fetch('/api/server_info').then(r => r.json());
+                const linksHtml = [
+                    `<strong>App Celular (mDNS):</strong> ${info.mdns_url}`,
+                    ...(info.urls || []).map(u => `<strong>App Celular (IP):</strong> ${u}`),
+                    `<strong>ESP32 detectado:</strong> ${info.esp32_url}`
+                ].join('<br>');
+                document.getElementById('infoServerLinks').innerHTML = linksHtml;
+
+                const st = await fetch('/api/esp32/status').then(r => r.json());
+                if (st && !st.error) {
+                    document.getElementById('infoEspStatus').innerText = `Conectado (${st.ip || 'OK'})`;
+                    if (st.wifi_ssid) document.getElementById('cfgWifiSsid').value = st.wifi_ssid;
+                } else {
+                    document.getElementById('infoEspStatus').innerText = 'Sin respuesta';
+                }
+            } catch (e) {}
+        }
+
+        async function guardarWifiESP32() {
+            const ssid = document.getElementById('cfgWifiSsid').value.trim();
+            const password = document.getElementById('cfgWifiPass').value;
+            if (!ssid) return;
+            const res = await fetch('/api/esp32/wifi_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ssid, password })
+            });
+            const d = await res.json();
+            if (d.saved) alert(`Wi-Fi "${ssid}" guardado en ESP32. Reconectando...`);
+            else alert('Error: ' + (d.error || 'No se pudo guardar'));
         }
 
         async function initCamera() {

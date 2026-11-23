@@ -12,11 +12,9 @@
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
-// Credenciales Wi-Fi de casa y hotspot del celular (escuela)
-const char* WIFI_SSID     = "KanHouse";
-const char* WIFI_PASSWORD = "k#it12$49&33)d%";
-const char* WIFI_HOTSPOT_SSID = "rafa";
-const char* WIFI_HOTSPOT_PASS = "12345678";
+// Red Wi-Fi por defecto: Hotspot del celular ("rafa")
+String wifiSsidPrimary = "rafa";
+String wifiPassPrimary = "12345678";
 
 WiFiMulti wifiMulti;
 unsigned long ultimoCheckWifi = 0;
@@ -176,18 +174,14 @@ void dibujarOled() {
         display.println(msg);
     }
 
-    // Pie de pantalla (y=56)
+    // Pie de pantalla (y=56): IP completa para conectar facil
     display.setTextSize(1);
     display.drawFastHLine(0, 54, 128, SSD1306_WHITE);
     display.setCursor(0, 56);
-    display.printf("C:%d R:%d", anguloCabeceo, anguloRotacion);
-    display.setCursor(72, 56);
     if (WiFi.status() == WL_CONNECTED) {
-        String ip = WiFi.localIP().toString();
-        int lastDot = ip.lastIndexOf('.');
-        display.print("." + ip.substring(lastDot + 1) + " OK");
+        display.print(WiFi.localIP().toString());
     } else {
-        display.print("AP Mode");
+        display.print("AP 192.168.4.1");
     }
 
     display.display();
@@ -349,6 +343,8 @@ String jsonEstado() {
            ",\"rect\":" + (modoRectangulo ? "true" : "false") +
            ",\"lado\":" + ladoActual +
            ",\"oled\":\"" + sanitizarASCII(textoOledPrincipal) + "\"" +
+           ",\"wifi_ssid\":\"" + WiFi.SSID() + "\"" +
+           ",\"ip\":\"" + (WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : String("192.168.4.1")) + "\"" +
            ",\"cal\":{\"cTL\":" + cTL + ",\"rTL\":" + rTL +
            ",\"cTR\":" + cTR + ",\"rTR\":" + rTR +
            ",\"cBR\":" + cBR + ",\"rBR\":" + rBR +
@@ -417,6 +413,26 @@ void handleNotify() {
     server.send(200, "application/json", jsonEstado());
 }
 
+void handleWifiConfig() {
+    if (server.hasArg("ssid") && server.hasArg("pass")) {
+        wifiSsidPrimary = server.arg("ssid");
+        wifiPassPrimary = server.arg("pass");
+        prefs.begin("trak_wifi", false);
+        prefs.putString("ssid", wifiSsidPrimary);
+        prefs.putString("pass", wifiPassPrimary);
+        prefs.end();
+        textoOledPrincipal = "WiFi: " + wifiSsidPrimary;
+        oledNecesitaActualizar = true;
+        iniciarBuzzer(1);
+        server.send(200, "application/json", "{\"saved\":true,\"ssid\":\"" + wifiSsidPrimary + "\"}");
+        delay(200);
+        WiFi.disconnect();
+        WiFi.begin(wifiSsidPrimary.c_str(), wifiPassPrimary.c_str());
+        return;
+    }
+    server.send(400, "application/json", "{\"error\":\"Falta ssid o pass\"}");
+}
+
 void handleToggleLaser() {
     actualizarLaser(!estadoLaser);
     server.send(200, "application/json", jsonEstado());
@@ -470,13 +486,17 @@ void setup() {
     moverNormalizado(0.5f, 0.5f);
     ponerColorLed(0, 180, 255);
 
-    // Wi-Fi Dual + Multi-Red (Casa KanHouse + Hotspot Celular "rafa")
+    // Wi-Fi por defecto: Hotspot del celular ("rafa") guardado en NVS
+    prefs.begin("trak_wifi", true);
+    wifiSsidPrimary = prefs.getString("ssid", "rafa");
+    wifiPassPrimary = prefs.getString("pass", "12345678");
+    prefs.end();
+
     WiFi.persistent(false);
     WiFi.mode(WIFI_AP_STA);
     WiFi.setTxPower(WIFI_POWER_15dBm);
     WiFi.softAP(AP_SSID, AP_PASS);
-    wifiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
-    wifiMulti.addAP(WIFI_HOTSPOT_SSID, WIFI_HOTSPOT_PASS);
+    wifiMulti.addAP(wifiSsidPrimary.c_str(), wifiPassPrimary.c_str());
     wifiMulti.run();
 
     // Servidor Web
@@ -487,6 +507,7 @@ void setup() {
     server.on("/api/center", HTTP_POST, handleCenter);
     server.on("/api/safe_area", HTTP_POST, handleSafeArea);
     server.on("/api/notify", HTTP_POST, handleNotify);
+    server.on("/api/wifi_config", HTTP_POST, handleWifiConfig);
     server.on("/api/laser/toggle", HTTP_POST, handleToggleLaser);
     server.on("/api/rect/toggle", HTTP_POST, handleToggleRect);
     server.begin();
