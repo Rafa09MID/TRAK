@@ -1,5 +1,6 @@
 import os
 import io
+import json
 import time
 import base64
 import requests
@@ -198,6 +199,93 @@ def api_gemini_analyze(payload: ImagePayload):
             return JSONResponse(status_code=500, content={"error": "Modelos de Gemini en alta demanda temporal. Reintenta en unos segundos."})
 
         return {"analysis": response_text, "model": selected_model}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/api/identify_and_point")
+def api_identify_and_point(payload: ImagePayload):
+    """
+    Identifica el objeto principal visible en el rango de visión usando Gemini 3.8 Flash
+    y devuelve su nombre, descripción y coordenadas normalizadas (0..1) para apuntar el láser.
+    """
+    if not ai_client:
+        return JSONResponse(status_code=500, content={"error": "API Key de Gemini no configurada."})
+
+    try:
+        base64_data = payload.image_base64.split(",")[1] if "," in payload.image_base64 else payload.image_base64
+        img_bytes = base64.b64decode(base64_data)
+
+        prompt_text = (
+            "Analiza esta imagen tomada por el sistema láser TRAK. "
+            "Identifica el objeto físico principal más relevante dentro de la escena (ignora el punto rojo del láser mismo). "
+            "Devuelve ÚNICAMENTE un JSON válido con esta estructura exacta (coordenadas box_2d en escala 0 a 1000 [ymin, xmin, ymax, xmax]):\n"
+            "{\n"
+            '  "objeto": "Nombre corto del objeto en español",\n'
+            '  "descripcion": "Qué es y dónde se encuentra brevemente (1 frase)",\n'
+            '  "box_2d": [ymin, xmin, ymax, xmax],\n'
+            '  "otros_objetos": [{"nombre": "...", "box_2d": [ymin, xmin, ymax, xmax]}]\n'
+            "}"
+        )
+
+        models_to_try = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
+        parsed = None
+        selected_model = None
+
+        for model_candidate in models_to_try:
+            try:
+                response = ai_client.models.generate_content(
+                    model=model_candidate,
+                    contents=[
+                        types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"),
+                        prompt_text
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
+                )
+                if response and response.text:
+                    raw = response.text.strip()
+                    if raw.startswith("```"):
+                        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+                    parsed = json.loads(raw)
+                    selected_model = model_candidate
+                    break
+            except Exception as model_err:
+                print(f"Aviso identify_and_point ({model_candidate}): {model_err}")
+                continue
+
+        if not parsed:
+            return JSONResponse(status_code=500, content={"error": "No se pudo identificar objetos en este momento."})
+
+        box = parsed.get("box_2d", [400, 400, 600, 600])
+        if len(box) != 4:
+            box = [400, 400, 600, 600]
+
+        ymin, xmin, ymax, xmax = [float(v) / 1000.0 for v in box]
+        target_x = round((xmin + xmax) / 2.0, 4)
+        target_y = round((ymin + ymax) / 2.0, 4)
+
+        otros = []
+        for obj in parsed.get("otros_objetos", [])[:4]:
+            b = obj.get("box_2d", [])
+            if len(b) == 4:
+                oy1, ox1, oy2, ox2 = [float(v) / 1000.0 for v in b]
+                otros.append({
+                    "nombre": obj.get("nombre", "Objeto"),
+                    "x": round((ox1 + ox2) / 2.0, 4),
+                    "y": round((oy1 + oy2) / 2.0, 4),
+                    "box": [oy1, ox1, oy2, ox2]
+                })
+
+        return {
+            "objeto": parsed.get("objeto", "Objeto detectado"),
+            "descripcion": parsed.get("descripcion", ""),
+            "target_x": target_x,
+            "target_y": target_y,
+            "box": [ymin, xmin, ymax, xmax],
+            "otros": otros,
+            "model": selected_model
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 

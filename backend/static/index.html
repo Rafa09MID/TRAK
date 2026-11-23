@@ -284,6 +284,35 @@
             color: #e0e7ff !important;
             font-weight: 700 !important;
         }
+        .btn-identify {
+            grid-column: span 2;
+            background: linear-gradient(135deg, #7c2d12, #ea580c) !important;
+            border-color: #fb923c !important;
+            color: #fff7ed !important;
+            font-weight: 800 !important;
+            box-shadow: 0 0 18px rgba(234, 88, 12, 0.35);
+        }
+        #identifyCard {
+            display: none;
+            background: rgba(234, 88, 12, 0.12);
+            border: 1px solid rgba(251, 146, 60, 0.45);
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 0.8rem;
+        }
+        #identifyCard h4 { color: #fb923c; font-size: 0.88rem; margin-bottom: 4px; }
+        #identifyCard p { color: #e2e8f0; line-height: 1.35; }
+        .other-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .obj-chip {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(251, 146, 60, 0.4);
+            color: #fed7aa;
+            padding: 4px 9px;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
         .esp-link {
             text-align: center;
             font-size: 0.72rem;
@@ -352,11 +381,18 @@
             </div>
 
             <div class="action-grid">
+                <button class="action-btn btn-identify" id="btnIdentify" onclick="identificarYSenalar()">🔍 Identificar y Señalar con Láser</button>
                 <button class="action-btn btn-laser on" id="btnLaserToggle" onclick="toggleLaser()">⚡ Láser ON/OFF</button>
                 <button class="action-btn" onclick="limpiarEsquinas()">🗑️ Borrar Esquinas</button>
                 <button class="action-btn btn-primary" id="btnAutoCalibrar" onclick="autoCalibrar()">🎯 Auto-Calibrar</button>
                 <button class="action-btn" onclick="centrarAreaSegura()">🎯 Centro</button>
-                <button class="action-btn btn-gemini" onclick="analizarConGemini()">🧠 Analizar con Gemini 3.8 IA</button>
+                <button class="action-btn btn-gemini" onclick="analizarConGemini()">🧠 Análisis Completo Gemini 3.8 IA</button>
+            </div>
+
+            <div id="identifyCard">
+                <h4 id="identifyTitle">🔍 Objeto Detectado</h4>
+                <p id="identifyDesc"></p>
+                <div class="other-chips" id="otherChips"></div>
             </div>
         </div>
     </div>
@@ -408,6 +444,8 @@
         let cabeceoActual = 115;
         let rotacionActual = 124;
         let calibrando = false;
+        let detectedObject = null; // { objeto, target_x, target_y, box }
+        let jacobianMatrix = JSON.parse(localStorage.getItem('trak_jacobian') || 'null');
 
         let videoDevices = [];
         let currentDeviceIndex = 0;
@@ -632,6 +670,33 @@
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
             }
+
+            if (detectedObject) {
+                const [ymin, xmin, ymax, xmax] = detectedObject.box || [0.4, 0.4, 0.6, 0.6];
+                const bx = xmin * canvas.width;
+                const by = ymin * canvas.height;
+                const bw = (xmax - xmin) * canvas.width;
+                const bh = (ymax - ymin) * canvas.height;
+
+                ctx.strokeStyle = "#fb923c";
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([6, 4]);
+                ctx.strokeRect(bx, by, bw, bh);
+                ctx.setLineDash([]);
+
+                const tx = detectedObject.target_x * canvas.width;
+                const ty = detectedObject.target_y * canvas.height;
+                ctx.beginPath();
+                ctx.arc(tx, ty, 7, 0, 2 * Math.PI);
+                ctx.fillStyle = "rgba(251, 146, 60, 0.9)";
+                ctx.fill();
+
+                ctx.fillStyle = "#ea580c";
+                ctx.fillRect(bx, Math.max(0, by - 22), Math.min(220, ctx.measureText(detectedObject.objeto).width + 18), 22);
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 12px sans-serif";
+                ctx.fillText(detectedObject.objeto, bx + 6, Math.max(15, by - 6));
+            }
             requestAnimationFrame(renderLoop);
         }
 
@@ -692,6 +757,8 @@
             const dy_drot = (pRot.y - p0.y) / dRot;
             const dx_dcab = (pCab.x - p0.x) / dCab;
             const dy_dcab = (pCab.y - p0.y) / dCab;
+            jacobianMatrix = { dx_dcab, dx_drot, dy_dcab, dy_drot };
+            localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
 
             await moverServos(110, 120);
 
@@ -840,6 +907,121 @@
                 document.getElementById('geminiText').innerText = d.analysis || d.error || "Sin respuesta.";
             } catch (e) {
                 document.getElementById('geminiText').innerText = "Error: " + e.message;
+            }
+        }
+
+        async function apuntarAObjetivo(targetX, targetY, label) {
+            calibrando = true;
+            document.getElementById('stepBadge').innerText = "Apuntando";
+            document.getElementById('instructionText').innerText = `Llevando láser hacia: ${label}...`;
+
+            // Si aún no hay Jacobiano medido, medir ejes rápidamente
+            if (!jacobianMatrix) {
+                const p0 = await medirPosicionLaser();
+                if (p0.detected) {
+                    const baseCab = cabeceoActual;
+                    const baseRot = rotacionActual;
+                    const dRot = baseRot > 150 ? -12 : 12;
+                    const dCab = baseCab > 150 ? -12 : 12;
+                    await moverServos(baseCab, baseRot + dRot);
+                    const pRot = await medirPosicionLaser();
+                    await moverServos(baseCab + dCab, baseRot);
+                    const pCab = await medirPosicionLaser();
+                    jacobianMatrix = {
+                        dx_drot: (pRot.x - p0.x) / dRot,
+                        dy_drot: (pRot.y - p0.y) / dRot,
+                        dx_dcab: (pCab.x - p0.x) / dCab,
+                        dy_dcab: (pCab.y - p0.y) / dCab
+                    };
+                    localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
+                    await moverServos(baseCab, baseRot);
+                }
+            }
+
+            const j = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
+            for (let step = 0; step < 8; step++) {
+                const res = await fetch('/api/align_step', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_base64: capturarFrameBase64(480),
+                        target_x: targetX,
+                        target_y: targetY,
+                        cabeceo_actual: cabeceoActual,
+                        rotacion_actual: rotacionActual,
+                        dx_dcab: j.dx_dcab,
+                        dx_drot: j.dx_drot,
+                        dy_dcab: j.dy_dcab,
+                        dy_drot: j.dy_drot
+                    })
+                });
+                const d = await res.json();
+                if (d.nuevo_cabeceo !== undefined) {
+                    cabeceoActual = d.nuevo_cabeceo;
+                    rotacionActual = d.nueva_rotacion;
+                }
+                if (d.alineado) break;
+                await new Promise(r => setTimeout(r, 360));
+            }
+
+            calibrando = false;
+            document.getElementById('stepBadge').innerText = "Señalado";
+            document.getElementById('instructionText').innerText = `Láser señalando: ${label}`;
+        }
+
+        async function identificarYSenalar() {
+            const btn = document.getElementById('btnIdentify');
+            const card = document.getElementById('identifyCard');
+            btn.disabled = true;
+            btn.innerText = "⏳ Identificando escena con Gemini 3.8...";
+            document.getElementById('stepBadge').innerText = "IA";
+            document.getElementById('instructionText').innerText = "Analizando lo que hay en el rango de visión...";
+
+            try {
+                const res = await fetch('/api/identify_and_point', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(640) })
+                });
+                const d = await res.json();
+                if (d.error) {
+                    alert("Error al identificar: " + d.error);
+                    return;
+                }
+
+                detectedObject = {
+                    objeto: d.objeto,
+                    target_x: d.target_x,
+                    target_y: d.target_y,
+                    box: d.box
+                };
+
+                card.style.display = 'block';
+                document.getElementById('identifyTitle').innerText = `🔍 Detectado: ${d.objeto}`;
+                document.getElementById('identifyDesc').innerText = d.descripcion || "";
+
+                const chips = document.getElementById('otherChips');
+                chips.innerHTML = "";
+                if (d.otros && d.otros.length > 0) {
+                    d.otros.forEach(o => {
+                        const btnChip = document.createElement('button');
+                        btnChip.className = 'obj-chip';
+                        btnChip.innerText = `🎯 Señalar: ${o.nombre}`;
+                        btnChip.onclick = () => {
+                            detectedObject = { objeto: o.nombre, target_x: o.x, target_y: o.y, box: o.box };
+                            document.getElementById('identifyTitle').innerText = `🔍 Señalando: ${o.nombre}`;
+                            apuntarAObjetivo(o.x, o.y, o.nombre);
+                        };
+                        chips.appendChild(btnChip);
+                    });
+                }
+
+                await apuntarAObjetivo(d.target_x, d.target_y, d.objeto);
+            } catch (e) {
+                alert("Error de conexión: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "🔍 Identificar y Señalar con Láser";
             }
         }
 
