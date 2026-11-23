@@ -458,6 +458,12 @@
                 <div id="laserCursor"></div>
             </div>
 
+            <div class="cmd-row">
+                <input type="number" id="inputCartX" class="cmd-input" step="0.5" min="-5" max="5" placeholder="X (-5 a 5)" value="0">
+                <input type="number" id="inputCartY" class="cmd-input" step="0.5" min="-5" max="5" placeholder="Y (-5 a 5)" value="0">
+                <button class="btn btn-blue" onclick="irACoordenadaCartesiana()">Ir</button>
+            </div>
+
             <div class="action-grid">
                 <button class="btn btn-blue" onclick="centrarAreaSegura()">Centro</button>
                 <button class="btn btn-red on" id="btnLaserCtrl" onclick="toggleLaser()">Laser: ON</button>
@@ -1322,6 +1328,15 @@
             const x = ((u - 0.5) * 10.0).toFixed(1);
             const y = ((0.5 - v) * 10.0).toFixed(1);
             return `${x}, ${y}`;
+        }
+
+        function irACoordenadaCartesiana() {
+            const cx = parseFloat(document.getElementById('inputCartX').value);
+            const cy = parseFloat(document.getElementById('inputCartY').value);
+            if (isNaN(cx) || isNaN(cy)) return;
+            const u = Math.max(0, Math.min(1, (cx / 10.0) + 0.5));
+            const v = Math.max(0, Math.min(1, 0.5 - (cy / 10.0)));
+            enviarCoordenadaPad(u, v, true);
         }
 
         function enviarCoordenadaPad(u, v, force = false) {
