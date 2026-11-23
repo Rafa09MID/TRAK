@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TRAK Vision - Calibrador Gimbal</title>
+    <style>
+        :root {
+            --primary: #00d2ff;
+            --primary-glow: rgba(0, 210, 255, 0.4);
+            --laser: #ff0055;
+            --laser-glow: rgba(255, 0, 85, 0.7);
+            --bg: #090d16;
+            --card: rgba(15, 23, 42, 0.88);
+            --border: rgba(255, 255, 255, 0.12);
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --corner: #10b981;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        /* BARRA SUPERIOR */
+        header {
+            background: var(--card);
+            backdrop-filter: blur(12px);
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 20;
+        }
+        .logo { font-size: 1.15rem; font-weight: 800; letter-spacing: 1px; color: var(--primary); text-shadow: 0 0 10px var(--primary-glow); }
+        .chip { font-size: 0.7rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; background: rgba(0, 210, 255, 0.15); color: var(--primary); }
+
+        /* CONTENEDOR DEL VISOR DE CÁMARA */
+        .camera-wrapper {
+            position: relative;
+            width: 100%;
+            height: 52vh;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        /* OVERLAYS DEL VISOR */
+        .camera-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 15;
+            pointer-events: none;
+        }
+        .pill {
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+            padding: 5px 12px;
+            border-radius: 14px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .pill.laser-detected { color: #ff3377; border-color: rgba(255,0,85,0.4); box-shadow: 0 0 10px var(--laser-glow); }
+
+        /* PANEL DE CONTROLES INFERIOR */
+        .controls-panel {
+            flex: 1;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            border-radius: 24px 24px 0 0;
+            margin-top: -16px;
+            z-index: 20;
+            padding: 18px 16px 30px;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .instruction-box {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px 14px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .badge-step {
+            background: var(--primary);
+            color: #05101d;
+            font-weight: 800;
+            border-radius: 8px;
+            padding: 2px 8px;
+            font-size: 0.75rem;
+        }
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        button {
+            padding: 13px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+        button:active { transform: scale(0.97); }
+        .btn-primary {
+            background: var(--primary);
+            color: #05101d;
+            border-color: var(--primary);
+            box-shadow: 0 0 15px var(--primary-glow);
+            font-weight: 700;
+        }
+        .btn-laser {
+            background: rgba(255, 0, 85, 0.15);
+            border-color: rgba(255, 0, 85, 0.4);
+            color: #ff3377;
+        }
+        .btn-laser.on {
+            background: var(--laser);
+            color: white;
+            box-shadow: 0 0 20px var(--laser-glow);
+        }
+        .btn-gemini {
+            grid-column: span 2;
+            background: linear-gradient(135deg, #1e1b4b, #312e81);
+            border-color: #6366f1;
+            color: #e0e7ff;
+            font-weight: 700;
+        }
+
+        /* MODAL DE RESULTADO GEMINI */
+        #geminiModal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            padding: 24px;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-card {
+            background: #131b2e;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            max-width: 480px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-card h3 { color: #818cf8; margin-bottom: 12px; font-size: 1.1rem; }
+        .modal-card p { font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; white-space: pre-wrap; }
+        .modal-close { margin-top: 16px; width: 100%; background: rgba(255,255,255,0.1); }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">⚡ TRAK VISION</div>
+        <div class="chip" id="connChip">ESP32 Online</div>
+    </header>
+
+    <!-- VISOR DE CÁMARA TRASERA -->
+    <div class="camera-wrapper">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlayCanvas"></canvas>
+
+        <div class="camera-overlay">
+            <div class="pill" id="laserStatusPill">Buscando Láser...</div>
+            <div class="pill" id="cornerCountPill">Esquinas: 0 / 4</div>
+        </div>
+    </div>
+
+    <!-- PANEL INFERIOR TÁCTIL -->
+    <div class="controls-panel">
+        <div class="instruction-box">
+            <span class="badge-step" id="stepBadge">Paso 1</span>
+            <span id="instructionText">Toca en la cámara las 4 esquinas de tu zona segura deseada.</span>
+        </div>
+
+        <div class="action-grid">
+            <button class="btn-laser" id="btnLaserToggle" onclick="toggleLaser()">⚡ Láser ON/OFF</button>
+            <button onclick="limpiarEsquinas()">🗑️ Borrar Esquinas</button>
+            <button class="btn-primary" id="btnAutoCalibrar" onclick="autoCalibrar()">🎯 Auto-Calibrar</button>
+            <button onclick="centrarGimbal()">🎯 Centro (90°)</button>
+            <button class="btn-gemini" onclick="analizarConGemini()">🧠 Analizar con Gemini IA</button>
+        </div>
+    </div>
+
+    <!-- MODAL DE RESPUESTA DE GEMINI -->
+    <div id="geminiModal">
+        <div class="modal-card">
+            <h3>🧠 Análisis Visual Gemini</h3>
+            <p id="geminiText">Analizando escena...</p>
+            <button class="modal-close" onclick="cerrarModal()">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('overlayCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let esquinas = []; // [{x, y}] en coordenadas 0.0 a 1.0
+        let laserPos = { x: 0.5, y: 0.5, detected: false };
+        let cabeceoActual = 90;
+        let rotacionActual = 90;
+        let calibrando = false;
+
+        // 1. INICIAR CÁMARA TRASERA DEL CELULAR
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    ajustarCanvas();
+                    requestAnimationFrame(renderLoop);
+                    setInterval(detectarLaserFrame, 200);
+                };
+            } catch (err) {
+                console.warn("Fallo cámara trasera, intentando cualquier cámara:", err);
+                try {
+                    const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = fallback;
+                    video.onloadedmetadata = () => {
+                        ajustarCanvas();
+                        requestAnimationFrame(renderLoop);
+                        setInterval(detectarLaserFrame, 200);
+                    };
+                } catch (e) {
+                    alert("Por favor concede permisos de cámara en tu navegador para usar TRAK.");
+                }
+            }
+        }
+
+        function ajustarCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', ajustarCanvas);
+
+        // 2. TOCAR LA PANTALLA PARA MARCAR ESQUINAS
+        canvas.addEventListener('click', (e) => {
+            if (esquinas.length >= 4) {
+                alert("Ya marcaste las 4 esquinas. Pulsa 'Auto-Calibrar' o 'Borrar Esquinas' para redefinir.");
+                return;
+            }
+            const rect = canvas.getBoundingClientRect();
+            const xNorm = (e.clientX - rect.left) / rect.width;
+            const yNorm = (e.clientY - rect.top) / rect.height;
+
+            esquinas.push({ x: xNorm, y: yNorm });
+            actualizarUIEsquinas();
+        });
+
+        function actualizarUIEsquinas() {
+            document.getElementById('cornerCountPill').innerText = `Esquinas: ${esquinas.length} / 4`;
+            if (esquinas.length < 4) {
+                document.getElementById('stepBadge').innerText = `Paso ${esquinas.length + 1}`;
+                document.getElementById('instructionText').innerText = `Toca la esquina ${esquinas.length + 1} de tu zona segura.`;
+            } else {
+                document.getElementById('stepBadge').innerText = "Listo";
+                document.getElementById('instructionText').innerText = "¡4 esquinas marcadas! Pulsa 'Auto-Calibrar'.";
+            }
+        }
+
+        function limpiarEsquinas() {
+            esquinas = [];
+            actualizarUIEsquinas();
+        }
+
+        // 3. DETECTAR LÁSER ENVIANDO FRAME AL BACKEND FASTAPI
+        async function detectarLaserFrame() {
+            if (video.videoWidth === 0) return;
+
+            // Capturar frame en un canvas en memoria
+            const snap = document.createElement('canvas');
+            snap.width = 480;
+            snap.height = Math.round(480 * (video.videoHeight / video.videoWidth));
+            const sCtx = snap.getContext('2d');
+            sCtx.drawImage(video, 0, 0, snap.width, snap.height);
+            const base64 = snap.toDataURL('image/jpeg', 0.65);
+
+            try {
+                const res = await fetch('/api/detect_laser', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: base64 })
+                });
+                const data = await res.json();
+                laserPos.detected = data.detected;
+                if (data.detected) {
+                    laserPos.x = data.x;
+                    laserPos.y = data.y;
+                    document.getElementById('laserStatusPill').innerText = `Láser: (${Math.round(data.x*100)}%, ${Math.round(data.y*100)}%)`;
+                    document.getElementById('laserStatusPill').classList.add('laser-detected');
+                } else {
+                    document.getElementById('laserStatusPill').innerText = 'Buscando Láser...';
+                    document.getElementById('laserStatusPill').classList.remove('laser-detected');
+                }
+            } catch (err) {}
+        }
+
+        // 4. RENDER LOOP EN CANVAS (DIBUJAR ESQUINAS, POLÍGONO Y LÁSER)
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Dibujar polígono entre esquinas marcadas
+            if (esquinas.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(esquinas[0].x * canvas.width, esquinas[0].y * canvas.height);
+                for (let i = 1; i < esquinas.length; i++) {
+                    ctx.lineTo(esquinas[i].x * canvas.width, esquinas[i].y * canvas.height);
+                }
+                if (esquinas.length === 4) ctx.closePath();
+                ctx.strokeStyle = "rgba(16, 185, 129, 0.8)";
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+                ctx.fillStyle = "rgba(16, 185, 129, 0.12)";
+                if (esquinas.length === 4) ctx.fill();
+            }
+
+            // Dibujar puntos de las esquinas
+            esquinas.forEach((pt, idx) => {
+                const px = pt.x * canvas.width;
+                const py = pt.y * canvas.height;
+
+                ctx.beginPath();
+                ctx.arc(px, py, 9, 0, 2 * Math.PI);
+                ctx.fillStyle = "#10b981";
+                ctx.shadowColor = "rgba(16, 185, 129, 0.8)";
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 11px sans-serif";
+                ctx.fillText(`P${idx + 1}`, px + 12, py - 6);
+            });
+
+            // Dibujar retículo sobre el Láser detectado
+            if (laserPos.detected) {
+                const lx = laserPos.x * canvas.width;
+                const ly = laserPos.y * canvas.height;
+
+                ctx.beginPath();
+                ctx.arc(lx, ly, 14, 0, 2 * Math.PI);
+                ctx.strokeStyle = "#ff0055";
+                ctx.lineWidth = 2;
+                ctx.shadowColor = "rgba(255, 0, 85, 1)";
+                ctx.shadowBlur = 15;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Cruz interior
+                ctx.beginPath();
+                ctx.moveTo(lx - 8, ly); ctx.lineTo(lx + 8, ly);
+                ctx.moveTo(lx, ly - 8); ctx.lineTo(lx, ly + 8);
+                ctx.strokeStyle = "#ff3377";
+                ctx.stroke();
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        // 5. CONTROL DEL ESP32
+        async function toggleLaser() {
+            const res = await fetch('/api/esp32/laser', { method: 'POST' });
+            const data = await res.json();
+            const btn = document.getElementById('btnLaserToggle');
+            if (data.laser) {
+                btn.classList.add('on');
+            } else {
+                btn.classList.remove('on');
+            }
+        }
+
+        async function centrarGimbal() {
+            cabeceoActual = 90;
+            rotacionActual = 90;
+            await fetch('/api/esp32/servo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cabeceo: 90, rotacion: 90 })
+            });
+        }
+
+        // 6. AUTO-CALIBRACIÓN VISUAL GUIADA
+        async function autoCalibrar() {
+            if (esquinas.length < 4) {
+                alert("Primero toca en la pantalla las 4 esquinas de tu zona segura.");
+                return;
+            }
+
+            calibrando = true;
+            document.getElementById('instructionText').innerText = "Iniciando auto-calibración guiada con el láser...";
+
+            const snap = document.createElement('canvas');
+            snap.width = 480;
+            snap.height = Math.round(480 * (video.videoHeight / video.videoWidth));
+            const sCtx = snap.getContext('2d');
+
+            const esquinasCalibradas = [];
+
+            for (let i = 0; i < 4; i++) {
+                const target = esquinas[i];
+                document.getElementById('instructionText').innerText = `Alineando Láser con Esquina P${i + 1}...`;
+
+                // Hasta 6 iteraciones de aproximación proporcional
+                for (let step = 0; step < 6; step++) {
+                    sCtx.drawImage(video, 0, 0, snap.width, snap.height);
+                    const b64 = snap.toDataURL('image/jpeg', 0.65);
+
+                    const res = await fetch('/api/align_step', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_base64: b64,
+                            target_x: target.x,
+                            target_y: target.y,
+                            cabeceo_actual: cabeceoActual,
+                            rotacion_actual: rotacionActual
+                        })
+                    });
+                    const d = await res.json();
+                    if (d.nuevo_cabeceo !== undefined) {
+                        cabeceoActual = d.nuevo_cabeceo;
+                        rotacionActual = d.nueva_rotacion;
+                    }
+                    if (d.alineado) break;
+                    await new Promise(r => setTimeout(r, 450));
+                }
+                esquinasCalibradas.push({ cabeceo: cabeceoActual, rotacion: rotacionActual });
+            }
+
+            calibrando = false;
+            document.getElementById('instructionText').innerText = "¡Zona calibrada con éxito!";
+            alert(`¡Calibración completada!\nEsquinas guardadas:\n` +
+                  `P1: Cab=${esquinasCalibradas[0].cabeceo}°, Rot=${esquinasCalibradas[0].rotacion}°\n` +
+                  `P2: Cab=${esquinasCalibradas[1].cabeceo}°, Rot=${esquinasCalibradas[1].rotacion}°\n` +
+                  `P3: Cab=${esquinasCalibradas[2].cabeceo}°, Rot=${esquinasCalibradas[2].rotacion}°\n` +
+                  `P4: Cab=${esquinasCalibradas[3].cabeceo}°, Rot=${esquinasCalibradas[3].rotacion}°`);
+        }
+
+        // 7. VISIÓN MULTIMODAL CON GEMINI
+        async function analizarConGemini() {
+            document.getElementById('geminiModal').style.display = 'flex';
+            document.getElementById('geminiText').innerText = "Capturando foto y consultando con Gemini 2.5 Flash...";
+
+            const snap = document.createElement('canvas');
+            snap.width = 640;
+            snap.height = Math.round(640 * (video.videoHeight / video.videoWidth));
+            const sCtx = snap.getContext('2d');
+            sCtx.drawImage(video, 0, 0, snap.width, snap.height);
+            const b64 = snap.toDataURL('image/jpeg', 0.85);
+
+            try {
+                const res = await fetch('/api/gemini_analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: b64 })
+                });
+                const d = await res.json();
+                document.getElementById('geminiText').innerText = d.analysis || d.error || "Sin respuesta.";
+            } catch (e) {
+                document.getElementById('geminiText').innerText = "Error al conectar con el servidor: " + e.message;
+            }
+        }
+
+        function cerrarModal() {
+            document.getElementById('geminiModal').style.display = 'none';
+        }
+
+        // Arrancar cámara al cargar
+        window.addEventListener('DOMContentLoaded', initCamera);
+    </script>
+</body>
+</html>

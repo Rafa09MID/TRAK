@@ -1,0 +1,25 @@
+# Variables de entorno y secretos
+.env
+*.env
+*.local
+
+# PlatformIO
+.pio
+.pioenvs
+.piolibdeps
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Certificados SSL locales
+*.pem
+*.key
+*.crt
+
+# IDEs
+.vscode/
+.idea/
