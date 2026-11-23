@@ -67,41 +67,51 @@ def decodificar_imagen(base64_str: str) -> np.ndarray:
 
 def detectar_laser_opencv(img_bgr: np.ndarray):
     """
-    Detecta el punto rojo del láser usando filtrado HSV y brillo máximo
-    Devuelve (x_norm, y_norm, detectado, radio)
+    Detector de alta precisión calibrado para cámara de celular:
+    Detecta el núcleo blanco-rosado saturado y halo rojo del láser en cualquier condición de luz.
+    Filtra reflejos grandes y prioriza puntos concentrados de alta intensidad.
     """
     h, w = img_bgr.shape[:2]
+    
+    # 1. Filtro en espacio HSV con saturación permisiva para sensores saturados
     hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+    mask1 = cv2.inRange(hsv, np.array([0, 25, 150]), np.array([18, 255, 255]))
+    mask2 = cv2.inRange(hsv, np.array([155, 25, 150]), np.array([180, 255, 255]))
+    hsv_mask = cv2.bitwise_or(mask1, mask2)
 
-    # Máscara de rojo en dos rangos del espacio HSV
-    mask1 = cv2.inRange(hsv, np.array([0, 100, 200]), np.array([12, 255, 255]))
-    mask2 = cv2.inRange(hsv, np.array([168, 100, 200]), np.array([180, 255, 255]))
-    mask = cv2.bitwise_or(mask1, mask2)
-
-    # También considerar píxeles con brillo blanco-rojo muy alto
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, bright_mask = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY)
-    laser_mask = cv2.bitwise_and(mask, bright_mask)
-
-    # Si la máscara combinada está vacía, usar la de color
-    if cv2.countNonZero(laser_mask) == 0:
-        laser_mask = mask
+    # 2. Filtro diferencial en canales BGR (el canal Rojo supera fuertemente al Verde y Azul)
+    b, g, r = cv2.split(img_bgr)
+    diff_mask = (r > g + 15) & (r > b + 10) & (r > 140)
+    
+    # Combinar ambas condiciones
+    laser_mask = cv2.bitwise_and(hsv_mask, diff_mask.astype(np.uint8) * 255)
 
     contours, _ = cv2.findContours(laser_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    if contours:
-        # Tomar el contorno más brillante y compacto
-        c = max(contours, key=cv2.contourArea)
+    # Filtrar solo contornos que tengan tamaño compatible con un láser (radio entre 1 y 40 px)
+    laser_candidates = []
+    for c in contours:
         (cx, cy), radius = cv2.minEnclosingCircle(c)
-        if radius >= 1:
-            return round(cx / w, 4), round(cy / h, 4), True, round(radius, 1)
+        if 1.0 <= radius <= 45.0:
+            area = cv2.contourArea(c)
+            # Intensidad en el centro
+            ix, iy = int(np.clip(cx, 0, w - 1)), int(np.clip(cy, 0, h - 1))
+            val = int(r[iy, ix])
+            laser_candidates.append({
+                "cx": cx, "cy": cy, "radius": radius,
+                "score": val * 2.0 - (int(g[iy, ix]) + int(b[iy, ix]))
+            })
 
-    # Fallback: buscar el punto de máxima intensidad luminosa en canal rojo
-    b, g, r = cv2.split(img_bgr)
-    diff = cv2.subtract(r, cv2.addWeighted(g, 0.5, b, 0.5, 0))
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(diff)
-    if max_val > 80:
-        return round(max_loc[0] / w, 4), round(max_loc[1] / h, 4), True, 3.0
+    if laser_candidates:
+        # Elegir el candidato con mayor intensidad diferencial
+        best = max(laser_candidates, key=lambda k: k["score"])
+        return round(best["cx"] / w, 4), round(best["cy"] / h, 4), True, round(best["radius"], 1)
+
+    # Fallback: Máximo pico diferencial de intensidad roja en la imagen completa
+    score = r.astype(np.float32) * 2.0 - (g.astype(np.float32) + b.astype(np.float32))
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(score)
+    if max_val > 70:
+        return round(max_loc[0] / w, 4), round(max_loc[1] / h, 4), True, 4.0
 
     return 0.5, 0.5, False, 0.0
 
