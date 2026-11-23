@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
@@ -11,9 +12,14 @@
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
-// Credenciales Wi-Fi de tu casa
+// Credenciales Wi-Fi de casa y hotspot del celular (escuela)
 const char* WIFI_SSID     = "KanHouse";
 const char* WIFI_PASSWORD = "k#it12$49&33)d%";
+const char* WIFI_HOTSPOT_SSID = "rafa";
+const char* WIFI_HOTSPOT_PASS = "12345678";
+
+WiFiMulti wifiMulti;
+unsigned long ultimoCheckWifi = 0;
 
 // Red Wi-Fi propia de respaldo
 const char* AP_SSID       = "ESP32-Laser-Gimbal";
@@ -464,12 +470,14 @@ void setup() {
     moverNormalizado(0.5f, 0.5f);
     ponerColorLed(0, 180, 255);
 
-    // Wi-Fi Dual
+    // Wi-Fi Dual + Multi-Red (Casa KanHouse + Hotspot Celular "rafa")
     WiFi.persistent(false);
     WiFi.mode(WIFI_AP_STA);
     WiFi.setTxPower(WIFI_POWER_15dBm);
     WiFi.softAP(AP_SSID, AP_PASS);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    wifiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
+    wifiMulti.addAP(WIFI_HOTSPOT_SSID, WIFI_HOTSPOT_PASS);
+    wifiMulti.run();
 
     // Servidor Web
     server.on("/", HTTP_GET, handleRoot);
@@ -495,6 +503,11 @@ void loop() {
     ArduinoOTA.handle();
     server.handleClient();
     actualizarBuzzer();
+
+    if (WiFi.status() != WL_CONNECTED && millis() - ultimoCheckWifi > 10000) {
+        ultimoCheckWifi = millis();
+        wifiMulti.run();
+    }
 
     if (oledNecesitaActualizar) {
         dibujarOled();
