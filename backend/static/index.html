@@ -396,9 +396,10 @@
             <div class="card">
                 <div class="status-line" style="justify-content: space-between; margin-bottom: 10px;">
                     <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Modo Area Segura</span>
-                    <div class="segmented-control" style="transform: scale(0.92); transform-origin: right;">
-                        <button class="seg-btn active" id="modeFullBtn" onclick="setAreaMode('full')">Toda la Camara</button>
+                    <div class="segmented-control" style="transform: scale(0.88); transform-origin: right;">
+                        <button class="seg-btn active" id="modeFullBtn" onclick="setAreaMode('full')">Camara</button>
                         <button class="seg-btn" id="modeManualBtn" onclick="setAreaMode('manual')">2 Esquinas</button>
+                        <button class="seg-btn" id="modeJoystickBtn" onclick="setAreaMode('joystick')">Joystick</button>
                     </div>
                 </div>
                 <div class="status-line">
@@ -433,9 +434,27 @@
                     <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(0, -2)">Izq</button>
                     <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(0, 2)">Der</button>
                 </div>
+                <div class="action-grid" style="grid-template-columns: 1.4fr 1fr 0.7fr; gap: 8px;">
+                    <button class="btn btn-green" id="btnConfirmCorner">Confirmar</button>
+                    <button class="btn btn-blue" id="btnRetryCorner">Reintentar</button>
+                    <button class="btn" id="btnCancelCalib">Salir</button>
+                </div>
+            </div>
+
+            <!-- MODO JOYSTICK MANUAL PARA CAPTURAR LAS 4 ESQUINAS -->
+            <div class="card" id="joystickCard" style="display:none; text-align:center;">
+                <div class="id-header" style="margin-bottom: 8px;">
+                    <span class="id-title" style="color: var(--blue);" id="joyCornerLabel">Esquina 1/4: (-5, 5)</span>
+                    <span class="id-model" id="joyAnglesText">115° / 124°</span>
+                </div>
+                <div id="joyBase" style="position:relative; width:150px; height:150px; margin:6px auto 12px; border-radius:50%; background:var(--surface-secondary); border:1px solid var(--border); touch-action:none;">
+                    <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(0,0,0,0.07);"></div>
+                    <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(0,0,0,0.07);"></div>
+                    <div id="joyThumb" style="position:absolute; left:50%; top:50%; width:54px; height:54px; border-radius:50%; background:var(--blue); box-shadow:0 4px 12px rgba(0,122,255,0.35); transform:translate(-50%,-50%); pointer-events:none;"></div>
+                </div>
                 <div class="action-grid">
-                    <button class="btn btn-green" id="btnConfirmCorner">Confirmar Esquina</button>
-                    <button class="btn" id="btnCancelCalib">Cancelar</button>
+                    <button class="btn btn-green" id="btnJoyCapture" onclick="capturarEsquinaJoystick()">Capturar (-5, 5)</button>
+                    <button class="btn" onclick="reiniciarJoystick()">Reiniciar 4 Esquinas</button>
                 </div>
             </div>
 
@@ -453,6 +472,9 @@
                     <span class="id-model" id="identifyModel"></span>
                 </div>
                 <p class="id-desc" id="identifyDesc"></p>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-blue btn-full" id="btnPointIdentified" style="display:none;" onclick="apuntarObjetoIdentificado()">Apuntar con Laser</button>
+                </div>
                 <div class="other-chips" id="otherChips"></div>
             </div>
         </div>
@@ -617,6 +639,9 @@
             areaMode = mode;
             document.getElementById('modeFullBtn').classList.toggle('active', mode === 'full');
             document.getElementById('modeManualBtn').classList.toggle('active', mode === 'manual');
+            document.getElementById('modeJoystickBtn').classList.toggle('active', mode === 'joystick');
+            document.getElementById('joystickCard').style.display = mode === 'joystick' ? 'block' : 'none';
+            if (mode === 'joystick') reiniciarJoystick();
             actualizarUIEsquinas();
         }
 
@@ -886,11 +911,15 @@
                 confirmResolver = resolve;
                 document.getElementById('btnConfirmCorner').onclick = () => {
                     card.style.display = 'none';
-                    resolve(true);
+                    resolve('confirm');
+                };
+                document.getElementById('btnRetryCorner').onclick = () => {
+                    card.style.display = 'none';
+                    resolve('retry');
                 };
                 document.getElementById('btnCancelCalib').onclick = () => {
                     card.style.display = 'none';
-                    resolve(false);
+                    resolve('cancel');
                 };
             });
         }
@@ -1060,11 +1089,15 @@
                     await new Promise(r => setTimeout(r, 550));
                 }
 
-                // Esperar confirmacion manual del usuario (con ajuste fino opcional)
+                // Esperar confirmacion manual del usuario (con ajuste fino, reintentar o salir)
                 document.getElementById('stepBadge').innerText = `Confirmar ${i+1}/4`;
-                document.getElementById('instructionText').innerText = `Verifica la esquina ${t.coordLabel} y pulsa Confirmar.`;
-                const confirmado = await esperarConfirmacionUsuario(t.coordLabel);
-                if (!confirmado) {
+                document.getElementById('instructionText').innerText = `Verifica la esquina ${t.coordLabel} y pulsa Confirmar o Reintentar.`;
+                const accion = await esperarConfirmacionUsuario(t.coordLabel);
+                if (accion === 'retry') {
+                    i--; // Volver a intentar exactamente esta misma esquina
+                    continue;
+                }
+                if (accion === 'cancel') {
                     calibrando = false;
                     actualizarUIEsquinas();
                     return;
@@ -1207,6 +1240,19 @@
                 document.getElementById('identifyModel').innerText = d.model || "";
                 document.getElementById('identifyDesc').innerText = d.descripcion || "";
 
+                const btnPtr = document.getElementById('btnPointIdentified');
+                try {
+                    const sa = await fetch('/api/safe_area').then(r => r.json());
+                    if (sa && sa.homography) {
+                        btnPtr.style.display = 'block';
+                        btnPtr.innerText = `Apuntar a: ${d.objeto}`;
+                    } else {
+                        btnPtr.style.display = 'none';
+                    }
+                } catch (e) {
+                    btnPtr.style.display = 'none';
+                }
+
                 const chips = document.getElementById('otherChips');
                 chips.innerHTML = "";
                 if (d.otros && d.otros.length > 0) {
@@ -1217,19 +1263,25 @@
                         btnChip.onclick = () => {
                             detectedObject = { objeto: o.nombre, target_x: o.x, target_y: o.y, box: o.box };
                             document.getElementById('identifyTitle').innerText = o.nombre;
-                            apuntarAObjetivo(o.x, o.y, o.nombre);
+                            if (btnPtr.style.display !== 'none') btnPtr.innerText = `Apuntar a: ${o.nombre}`;
                         };
                         chips.appendChild(btnChip);
                     });
                 }
 
-                await apuntarDirectoOHibrido(d.target_x, d.target_y, d.objeto);
+                document.getElementById('stepBadge').innerText = "Listo";
+                document.getElementById('instructionText').innerText = `Detectado: ${d.objeto}`;
             } catch (e) {
                 alert("Error de conexion: " + e.message);
             } finally {
                 btn.disabled = false;
                 btn.innerText = "Identificar con IA";
             }
+        }
+
+        async function apuntarObjetoIdentificado() {
+            if (!detectedObject) return;
+            await apuntarDirectoOHibrido(detectedObject.target_x, detectedObject.target_y, detectedObject.objeto);
         }
 
         async function apuntarDirectoOHibrido(x, y, label) {
@@ -1469,7 +1521,134 @@
             }
         }
 
-        window.addEventListener('DOMContentLoaded', initCamera);
+        // MODO JOYSTICK MANUAL PARA CAPTURAR LAS 4 ESQUINAS
+        const JOY_CORNERS = [
+            { key: "TL", label: "(-5, 5)" },
+            { key: "TR", label: "(5, 5)" },
+            { key: "BR", label: "(5, -5)" },
+            { key: "BL", label: "(-5, -5)" }
+        ];
+        let joyStep = 0;
+        let joyCal = {};
+        let joyCamCorners = [];
+        let joyTimer = null;
+        let joyDx = 0, joyDy = 0;
+
+        function reiniciarJoystick() {
+            joyStep = 0;
+            joyCal = {};
+            joyCamCorners = [];
+            registeredCornerAnims = [];
+            calibratedPolygon = null;
+            actualizarUIJoystick();
+        }
+
+        function actualizarUIJoystick() {
+            const c = JOY_CORNERS[joyStep];
+            if (!c) return;
+            document.getElementById('joyCornerLabel').innerText = `Esquina ${joyStep + 1}/4: ${c.label}`;
+            document.getElementById('btnJoyCapture').innerText = `Capturar ${c.label}`;
+            document.getElementById('joyAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
+            document.getElementById('stepBadge').innerText = `Joy ${joyStep + 1}/4`;
+            document.getElementById('instructionText').innerText = `Mueve el joystick hacia ${c.label} y pulsa Capturar.`;
+        }
+
+        function initJoystick() {
+            const base = document.getElementById('joyBase');
+            const thumb = document.getElementById('joyThumb');
+            let active = false;
+
+            function updateStick(e) {
+                const rect = base.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                let dx = clientX - cx;
+                let dy = clientY - cy;
+                const maxR = rect.width / 2 - 27;
+                const dist = Math.hypot(dx, dy);
+                if (dist > maxR) {
+                    dx = (dx / dist) * maxR;
+                    dy = (dy / dist) * maxR;
+                }
+                thumb.style.left = (50 + (dx / rect.width) * 100) + '%';
+                thumb.style.top = (50 + (dy / rect.height) * 100) + '%';
+                joyDx = dx / maxR; // -1..1 (izq/der -> rotacion)
+                joyDy = dy / maxR; // -1..1 (arriba/abajo -> cabeceo)
+            }
+
+            function stopStick() {
+                active = false;
+                joyDx = 0; joyDy = 0;
+                thumb.style.left = '50%';
+                thumb.style.top = '50%';
+                if (joyTimer) { clearInterval(joyTimer); joyTimer = null; }
+            }
+
+            base.addEventListener('pointerdown', (e) => {
+                active = true;
+                updateStick(e);
+                if (!joyTimer) {
+                    joyTimer = setInterval(async () => {
+                        if (!active || (Math.abs(joyDx) < 0.12 && Math.abs(joyDy) < 0.12)) return;
+                        const dRot = Math.round(joyDx * 3);
+                        const dCab = Math.round(-joyDy * 3);
+                        if (dRot !== 0 || dCab !== 0) {
+                            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 10);
+                            document.getElementById('joyAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
+                        }
+                    }, 110);
+                }
+            });
+            window.addEventListener('pointermove', (e) => { if (active) updateStick(e); });
+            window.addEventListener('pointerup', stopStick);
+        }
+
+        async function capturarEsquinaJoystick() {
+            const c = JOY_CORNERS[joyStep];
+            if (!c) return;
+
+            const det = await medirPosicionLaser();
+            const lx = det.detected ? det.x : (c.key.includes('L') ? 0.15 : 0.85);
+            const ly = det.detected ? det.y : (c.key.includes('T') ? 0.15 : 0.85);
+
+            joyCal[`c${c.key}`] = cabeceoActual;
+            joyCal[`r${c.key}`] = rotacionActual;
+            joyCamCorners.push([lx, ly]);
+
+            registeredCornerAnims.push({
+                x: lx, y: ly, label: c.label, startTime: Date.now()
+            });
+
+            joyStep++;
+            if (joyStep < 4) {
+                actualizarUIJoystick();
+                return;
+            }
+
+            // 4 esquinas capturadas -> guardar Homografia + ESP32 NVS y verificar
+            calibratedPolygon = joyCamCorners;
+            document.getElementById('stepBadge').innerText = "Guardando";
+            document.getElementById('instructionText').innerText = "Calculando Homografia 3x3 y guardando...";
+
+            await fetch('/api/calibrate_homography', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cam_corners: joyCamCorners, servo_corners: joyCal })
+            });
+            await fetch('/api/esp32/center', { method: 'POST' });
+
+            document.getElementById('stepBadge').innerText = "Verificado";
+            document.getElementById('instructionText').innerText = "Area Segura manual calibrada.";
+            cambiarVista('control');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initCamera();
+            initJoystick();
+        });
     </script>
 </body>
 </html>
