@@ -11,7 +11,7 @@
             --laser: #ff0055;
             --laser-glow: rgba(255, 0, 85, 0.7);
             --bg: #090d16;
-            --card: rgba(15, 23, 42, 0.88);
+            --card: rgba(15, 23, 42, 0.9);
             --border: rgba(255, 255, 255, 0.12);
             --text: #f8fafc;
             --text-dim: #94a3b8;
@@ -31,14 +31,14 @@
         header {
             background: var(--card);
             backdrop-filter: blur(12px);
-            padding: 12px 16px;
+            padding: 10px 16px;
             border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
             z-index: 20;
         }
-        .logo { font-size: 1.15rem; font-weight: 800; letter-spacing: 1px; color: var(--primary); text-shadow: 0 0 10px var(--primary-glow); }
+        .logo { font-size: 1.1rem; font-weight: 800; letter-spacing: 1px; color: var(--primary); text-shadow: 0 0 10px var(--primary-glow); }
         .chip { font-size: 0.7rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; background: rgba(0, 210, 255, 0.15); color: var(--primary); }
 
         /* CONTENEDOR DEL VISOR DE CÁMARA */
@@ -88,6 +88,38 @@
         }
         .pill.laser-detected { color: #ff3377; border-color: rgba(255,0,85,0.4); box-shadow: 0 0 10px var(--laser-glow); }
 
+        /* SELECTOR DE CÁMARAS Y ZOOM EN PANTALLA (0.5x / 1x / Lente) */
+        .camera-controls-floating {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(12px);
+            padding: 6px 10px;
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            z-index: 16;
+        }
+        .btn-zoom {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            border: 1px solid transparent;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-zoom.active {
+            background: var(--primary);
+            color: #05101d;
+            box-shadow: 0 0 12px var(--primary-glow);
+        }
+
         /* PANEL DE CONTROLES INFERIOR */
         .controls-panel {
             flex: 1;
@@ -96,7 +128,7 @@
             border-radius: 24px 24px 0 0;
             margin-top: -16px;
             z-index: 20;
-            padding: 18px 16px 30px;
+            padding: 16px 16px 28px;
             box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
@@ -106,7 +138,7 @@
             background: rgba(255,255,255,0.03);
             border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 10px 14px;
+            padding: 9px 12px;
             font-size: 0.8rem;
             display: flex;
             align-items: center;
@@ -126,7 +158,7 @@
             gap: 10px;
         }
         button {
-            padding: 13px;
+            padding: 12px;
             border-radius: 14px;
             border: 1px solid var(--border);
             background: rgba(255,255,255,0.05);
@@ -208,6 +240,13 @@
             <div class="pill" id="laserStatusPill">Buscando Láser...</div>
             <div class="pill" id="cornerCountPill">Esquinas: 0 / 4</div>
         </div>
+
+        <!-- SELECTOR DE LENTES FLOTANTE (0.5x, 1x, Cambiar Lente) -->
+        <div class="camera-controls-floating">
+            <button class="btn-zoom" id="btnZoom05" onclick="setZoomMode(0.5)">0.5x Gran Angular</button>
+            <button class="btn-zoom active" id="btnZoom1" onclick="setZoomMode(1.0)">1x Normal</button>
+            <button class="btn-zoom" onclick="siguienteCamara()">🔄 Lente</button>
+        </div>
     </div>
 
     <!-- PANEL INFERIOR TÁCTIL -->
@@ -246,32 +285,120 @@
         let rotacionActual = 90;
         let calibrando = false;
 
-        // 1. INICIAR CÁMARA TRASERA DEL CELULAR
+        // Gestión de cámaras físicas y zoom
+        let videoDevices = [];
+        let currentDeviceIndex = 0;
+        let currentTrack = null;
+
+        // 1. INICIAR Y ENUMERAR CÁMARAS DEL CELULAR
         async function initCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                // Primero solicitar permisos para poder enumerar etiquetas
+                const initialStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } }
                 });
-                video.srcObject = stream;
+                initialStream.getTracks().forEach(t => t.stop());
+
+                // Enumerar dispositivos
+                const allDevices = await navigator.mediaDevices.enumerateDevices();
+                videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+                console.log("Cámaras encontradas:", videoDevices);
+
+                // Arrancar con la cámara trasera preferida
+                await startCameraStream(currentDeviceIndex);
+
                 video.onloadedmetadata = () => {
                     ajustarCanvas();
                     requestAnimationFrame(renderLoop);
                     setInterval(detectarLaserFrame, 200);
                 };
             } catch (err) {
-                console.warn("Fallo cámara trasera, intentando cualquier cámara:", err);
+                console.error("Error al iniciar cámara:", err);
+                alert("Por favor concede permisos de cámara en tu navegador para usar TRAK.");
+            }
+        }
+
+        async function startCameraStream(deviceIndex) {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+            }
+
+            const constraints = {
+                video: {
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            };
+
+            if (videoDevices.length > 0 && videoDevices[deviceIndex]) {
+                constraints.video.deviceId = { exact: videoDevices[deviceIndex].deviceId };
+            } else {
+                constraints.video.facingMode = { ideal: "environment" };
+            }
+
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            currentTrack = stream.getVideoTracks()[0];
+            ajustarCanvas();
+        }
+
+        // 2. FUNCIÓN PARA ALTERNAR ENTRE LENTES (0.5x ULTRA WIDE Y 1x)
+        async function setZoomMode(factor) {
+            document.getElementById('btnZoom05').classList.toggle('active', factor === 0.5);
+            document.getElementById('btnZoom1').classList.toggle('active', factor === 1.0);
+
+            if (!currentTrack) return;
+
+            // Intentar aplicar zoom vía API de capacidades de cámara (MediaStreamTrack)
+            const capabilities = currentTrack.getCapabilities ? currentTrack.getCapabilities() : {};
+
+            if (capabilities.zoom) {
+                const targetZoom = factor === 0.5 ? capabilities.zoom.min : 1.0;
                 try {
-                    const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
-                    video.srcObject = fallback;
-                    video.onloadedmetadata = () => {
-                        ajustarCanvas();
-                        requestAnimationFrame(renderLoop);
-                        setInterval(detectarLaserFrame, 200);
-                    };
+                    await currentTrack.applyConstraints({
+                        advanced: [{ zoom: targetZoom }]
+                    });
+                    console.log(`Zoom aplicado con éxito: ${targetZoom}x`);
+                    return;
                 } catch (e) {
-                    alert("Por favor concede permisos de cámara en tu navegador para usar TRAK.");
+                    console.warn("No se pudo aplicar zoom por constraints:", e);
                 }
             }
+
+            // Si no soporta zoom continuo por software, buscar lente físico Ultra-Wide en los dispositivos
+            if (factor === 0.5 && videoDevices.length > 1) {
+                // Buscar dispositivo con nombre de ultra wide o seleccionar el siguiente
+                let ultraIndex = videoDevices.findIndex(d => 
+                    d.label.toLowerCase().includes('ultra') || 
+                    d.label.toLowerCase().includes('wide') || 
+                    d.label.toLowerCase().includes('0.5') || 
+                    d.label.includes('camera2 2') ||
+                    d.label.includes('camera2 3')
+                );
+                if (ultraIndex === -1 && videoDevices.length > 1) {
+                    // Si no tiene nombre explícito, el segundo suele ser el ultra-wide
+                    ultraIndex = (currentDeviceIndex + 1) % videoDevices.length;
+                }
+                if (ultraIndex !== -1 && ultraIndex !== currentDeviceIndex) {
+                    currentDeviceIndex = ultraIndex;
+                    await startCameraStream(currentDeviceIndex);
+                }
+            } else if (factor === 1.0 && videoDevices.length > 0) {
+                currentDeviceIndex = 0;
+                await startCameraStream(0);
+            }
+        }
+
+        // 3. BOTÓN PARA RECORRER TODAS LAS CÁMARAS TRASERAS
+        async function siguienteCamara() {
+            if (videoDevices.length <= 1) {
+                alert("Tu dispositivo reporta una sola cámara trasera accesible por navegador.");
+                return;
+            }
+            currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+            await startCameraStream(currentDeviceIndex);
+            const label = videoDevices[currentDeviceIndex].label || `Cámara ${currentDeviceIndex + 1}`;
+            document.getElementById('connChip').innerText = label.substring(0, 18);
         }
 
         function ajustarCanvas() {
@@ -280,7 +407,7 @@
         }
         window.addEventListener('resize', ajustarCanvas);
 
-        // 2. TOCAR LA PANTALLA PARA MARCAR ESQUINAS
+        // 4. TOCAR LA PANTALLA PARA MARCAR ESQUINAS
         canvas.addEventListener('click', (e) => {
             if (esquinas.length >= 4) {
                 alert("Ya marcaste las 4 esquinas. Pulsa 'Auto-Calibrar' o 'Borrar Esquinas' para redefinir.");
@@ -310,11 +437,10 @@
             actualizarUIEsquinas();
         }
 
-        // 3. DETECTAR LÁSER ENVIANDO FRAME AL BACKEND FASTAPI
+        // 5. DETECTAR LÁSER ENVIANDO FRAME AL BACKEND FASTAPI
         async function detectarLaserFrame() {
             if (video.videoWidth === 0) return;
 
-            // Capturar frame en un canvas en memoria
             const snap = document.createElement('canvas');
             snap.width = 480;
             snap.height = Math.round(480 * (video.videoHeight / video.videoWidth));
@@ -342,7 +468,7 @@
             } catch (err) {}
         }
 
-        // 4. RENDER LOOP EN CANVAS (DIBUJAR ESQUINAS, POLÍGONO Y LÁSER)
+        // 6. RENDER LOOP EN CANVAS (DIBUJAR ESQUINAS, POLÍGONO Y LÁSER)
         function renderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -354,7 +480,7 @@
                     ctx.lineTo(esquinas[i].x * canvas.width, esquinas[i].y * canvas.height);
                 }
                 if (esquinas.length === 4) ctx.closePath();
-                ctx.strokeStyle = "rgba(16, 185, 129, 0.8)";
+                ctx.strokeStyle = "rgba(16, 185, 129, 0.85)";
                 ctx.lineWidth = 2.5;
                 ctx.stroke();
                 ctx.fillStyle = "rgba(16, 185, 129, 0.12)";
@@ -393,7 +519,6 @@
                 ctx.stroke();
                 ctx.shadowBlur = 0;
 
-                // Cruz interior
                 ctx.beginPath();
                 ctx.moveTo(lx - 8, ly); ctx.lineTo(lx + 8, ly);
                 ctx.moveTo(lx, ly - 8); ctx.lineTo(lx, ly + 8);
@@ -404,7 +529,7 @@
             requestAnimationFrame(renderLoop);
         }
 
-        // 5. CONTROL DEL ESP32
+        // 7. CONTROL DEL ESP32
         async function toggleLaser() {
             const res = await fetch('/api/esp32/laser', { method: 'POST' });
             const data = await res.json();
@@ -426,7 +551,7 @@
             });
         }
 
-        // 6. AUTO-CALIBRACIÓN VISUAL GUIADA
+        // 8. AUTO-CALIBRACIÓN VISUAL GUIADA
         async function autoCalibrar() {
             if (esquinas.length < 4) {
                 alert("Primero toca en la pantalla las 4 esquinas de tu zona segura.");
@@ -447,7 +572,6 @@
                 const target = esquinas[i];
                 document.getElementById('instructionText').innerText = `Alineando Láser con Esquina P${i + 1}...`;
 
-                // Hasta 6 iteraciones de aproximación proporcional
                 for (let step = 0; step < 6; step++) {
                     sCtx.drawImage(video, 0, 0, snap.width, snap.height);
                     const b64 = snap.toDataURL('image/jpeg', 0.65);
@@ -483,7 +607,7 @@
                   `P4: Cab=${esquinasCalibradas[3].cabeceo}°, Rot=${esquinasCalibradas[3].rotacion}°`);
         }
 
-        // 7. VISIÓN MULTIMODAL CON GEMINI
+        // 9. VISIÓN MULTIMODAL CON GEMINI
         async function analizarConGemini() {
             document.getElementById('geminiModal').style.display = 'flex';
             document.getElementById('geminiText').innerText = "Capturando foto y consultando con Gemini 2.5 Flash...";
@@ -512,7 +636,6 @@
             document.getElementById('geminiModal').style.display = 'none';
         }
 
-        // Arrancar cámara al cargar
         window.addEventListener('DOMContentLoaded', initCamera);
     </script>
 </body>
