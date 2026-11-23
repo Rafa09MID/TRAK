@@ -88,6 +88,8 @@ class AlignRequest(BaseModel):
     dx_drot: float = 0.0
     dy_dcab: float = 0.0
     dy_drot: float = 0.0
+    gain: float = 0.6
+    max_step: int = 9
 
 def decodificar_imagen(base64_str: str) -> np.ndarray:
     if "," in base64_str:
@@ -424,18 +426,21 @@ def align_step(req: AlignRequest):
         }
 
     det = req.dx_dcab * req.dy_drot - req.dx_drot * req.dy_dcab
-    if abs(det) > 1e-6:
-        # Usar matriz inversa del Jacobiano medido con amortiguación 0.75
+    max_s = float(max(2, min(15, req.max_step)))
+    g = float(max(0.2, min(0.85, req.gain)))
+
+    if abs(det) > 1e-5:
+        # Usar matriz inversa del Jacobiano medido con paso suave limitado
         raw_dcab = (req.dy_drot * err_x - req.dx_drot * err_y) / det
         raw_drot = (-req.dy_dcab * err_x + req.dx_dcab * err_y) / det
-        delta_cab = int(round(max(-22.0, min(22.0, raw_dcab * 0.75))))
-        delta_rot = int(round(max(-22.0, min(22.0, raw_drot * 0.75))))
+        delta_cab = int(round(max(-max_s, min(max_s, raw_dcab * g))))
+        delta_rot = int(round(max(-max_s, min(max_s, raw_drot * g))))
     else:
-        # Fallback proporcional si no hay Jacobiano
-        KP_ROT = 28.0
-        KP_CAB = 28.0
-        delta_rot = int(err_x * KP_ROT)
-        delta_cab = int(-err_y * KP_CAB)
+        # Fallback proporcional suave si no hay Jacobiano
+        KP_ROT = 20.0
+        KP_CAB = 20.0
+        delta_rot = int(round(max(-max_s, min(max_s, err_x * KP_ROT * g))))
+        delta_cab = int(round(max(-max_s, min(max_s, -err_y * KP_CAB * g))))
 
     # Asegurar al menos 1 grado de movimiento si no está alineado y el cálculo dio 0
     if delta_cab == 0 and abs(err_y) > 0.015:

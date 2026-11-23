@@ -751,31 +751,75 @@
 
             calibrando = true;
             document.getElementById('stepBadge').innerText = "Fase 1";
-            document.getElementById('instructionText').innerText = "Mapeando sensibilidad de ejes...";
+            document.getElementById('instructionText').innerText = "Sincronizando posicion actual del laser...";
 
-            await moverServos(110, 120);
-            const p0 = await medirPosicionLaser();
+            // 1. Obtener posicion real actual del ESP32
+            try {
+                const st = await fetch('/api/esp32/status').then(r => r.json());
+                if (st.cabeceo !== undefined) cabeceoActual = st.cabeceo;
+                if (st.rotacion !== undefined) rotacionActual = st.rotacion;
+            } catch (e) {}
+
+            // Si no se ve el laser en la posicion actual, buscarlo suavemente alrededor del centro
+            let p0 = await medirPosicionLaser();
+            if (!p0.detected) {
+                const busquedas = [[110, 120], [95, 120], [125, 120], [110, 100], [110, 140], [90, 90]];
+                for (const [bc, br] of busquedas) {
+                    await moverServos(bc, br);
+                    p0 = await medirPosicionLaser();
+                    if (p0.detected) break;
+                }
+            }
+
             if (!p0.detected) {
                 calibrando = false;
-                alert("No se detecta el laser. Verifica que este encendido y visible.");
+                alert("No se detecta el laser en la camara. Apunta hacia el punto rojo e intenta de nuevo.");
                 actualizarUIEsquinas();
                 return;
             }
 
-            const dRot = 14, dCab = 14;
-            await moverServos(110, 120 + dRot);
-            const pRot = await medirPosicionLaser();
-            await moverServos(110 + dCab, 120);
-            const pCab = await medirPosicionLaser();
+            // Punto seguro ancla donde sabemos que el laser es visible
+            const safeCab = cabeceoActual;
+            const safeRot = rotacionActual;
 
-            jacobianMatrix = {
-                dx_drot: (pRot.x - p0.x) / dRot,
-                dy_drot: (pRot.y - p0.y) / dRot,
-                dx_dcab: (pCab.x - p0.x) / dCab,
-                dy_dcab: (pCab.y - p0.y) / dCab
-            };
-            localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
-            await moverServos(110, 120);
+            // 2. Probar Rotacion con paso suave (+7° o -7° si se sale)
+            let dRot = safeRot > 160 ? -7 : 7;
+            await moverServos(safeCab, safeRot + dRot);
+            let pRot = await medirPosicionLaser();
+            if (!pRot.detected) {
+                await moverServos(safeCab, safeRot);
+                dRot = -dRot;
+                await moverServos(safeCab, safeRot + dRot);
+                pRot = await medirPosicionLaser();
+            }
+            await moverServos(safeCab, safeRot);
+
+            // 3. Probar Cabeceo con paso suave (+7° o -7° si se sale)
+            let dCab = safeCab > 160 ? -7 : 7;
+            await moverServos(safeCab + dCab, safeRot);
+            let pCab = await medirPosicionLaser();
+            if (!pCab.detected) {
+                await moverServos(safeCab, safeRot);
+                dCab = -dCab;
+                await moverServos(safeCab + dCab, safeRot);
+                pCab = await medirPosicionLaser();
+            }
+            await moverServos(safeCab, safeRot);
+
+            if (pRot.detected && pCab.detected) {
+                const jCandidate = {
+                    dx_drot: (pRot.x - p0.x) / dRot,
+                    dy_drot: (pRot.y - p0.y) / dRot,
+                    dx_dcab: (pCab.x - p0.x) / dCab,
+                    dy_dcab: (pCab.y - p0.y) / dCab
+                };
+                const det = jCandidate.dx_dcab * jCandidate.dy_drot - jCandidate.dx_drot * jCandidate.dy_dcab;
+                if (Math.abs(det) > 1e-5) {
+                    jacobianMatrix = jCandidate;
+                    localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
+                }
+            }
+            const jActive = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
 
             const targets = [
                 { key: "TL", name: "Superior Izquierda", pt: rectArea.TL },
@@ -791,8 +835,13 @@
                 document.getElementById('stepBadge').innerText = `${i+1} / 4`;
                 document.getElementById('instructionText').innerText = `Alineando: ${t.name}`;
 
+                let lastValidCab = cabeceoActual;
+                let lastValidRot = rotacionActual;
                 let lastLx = t.pt.x, lastLy = t.pt.y;
-                for (let step = 0; step < 8; step++) {
+                let stepGain = 0.55;
+                let stepMax = 8;
+
+                for (let step = 0; step < 14; step++) {
                     const res = await fetch('/api/align_step', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -802,10 +851,24 @@
                             target_y: t.pt.y,
                             cabeceo_actual: cabeceoActual,
                             rotacion_actual: rotacionActual,
-                            ...jacobianMatrix
+                            gain: stepGain,
+                            max_step: stepMax,
+                            ...jActive
                         })
                     });
                     const d = await res.json();
+
+                    if (d.status === "laser_not_found") {
+                        // Se salio del rango visual: regresar inmediatamente al ultimo punto valido y reducir paso
+                        document.getElementById('instructionText').innerText = `Recuperando laser dentro de camara (${t.name})...`;
+                        await moverServos(lastValidCab, lastValidRot);
+                        stepGain = Math.max(0.25, stepGain * 0.55);
+                        stepMax = Math.max(3, Math.floor(stepMax * 0.6));
+                        continue;
+                    }
+
+                    lastValidCab = cabeceoActual;
+                    lastValidRot = rotacionActual;
                     if (d.laser_x !== undefined) { lastLx = d.laser_x; lastLy = d.laser_y; }
                     if (d.nuevo_cabeceo !== undefined) {
                         cabeceoActual = d.nuevo_cabeceo;
@@ -814,6 +877,13 @@
                     if (d.alineado) break;
                     await new Promise(r => setTimeout(r, 380));
                 }
+
+                // Asegurar que la esquina guardada corresponda al ultimo punto valido detectado
+                const check = await medirPosicionLaser();
+                if (!check.detected) {
+                    await moverServos(lastValidCab, lastValidRot);
+                }
+
                 cal[`c${t.key}`] = cabeceoActual;
                 cal[`r${t.key}`] = rotacionActual;
                 camCorners.push([lastLx, lastLy]);
