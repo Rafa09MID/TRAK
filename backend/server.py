@@ -90,11 +90,10 @@ def llamar_gemini_rapido(img_bytes: bytes, prompt_text: str, json_mode: bool = F
     priorizando gemini-3.8-flash y cayendo en <0.5s al siguiente modelo disponible si hay 503.
     """
     models_to_try = [
-        "gemini-3.8-flash",
-        "gemini-3.7-flash",
-        "gemini-3.5-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-flash"
+        ("gemini-3.8-flash", 4),
+        ("gemini-3.5-flash-lite", 10),
+        ("gemini-3.1-flash-lite", 10),
+        ("gemini-3.6-flash", 12),
     ]
     b64_img = base64.b64encode(img_bytes).decode("utf-8")
     body = {
@@ -109,10 +108,10 @@ def llamar_gemini_rapido(img_bytes: bytes, prompt_text: str, json_mode: bool = F
         body["generationConfig"] = {"responseMimeType": "application/json"}
 
     last_err = ""
-    for m in models_to_try:
+    for m, t_sec in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={GEMINI_API_KEY}"
         try:
-            res = requests.post(url, json=body, timeout=10)
+            res = requests.post(url, json=body, timeout=t_sec)
             if res.status_code == 200:
                 data = res.json()
                 candidates = data.get("candidates", [])
