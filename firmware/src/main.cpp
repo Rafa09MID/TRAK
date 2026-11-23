@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
+#include <Preferences.h>
 #include <Adafruit_NeoPixel.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
@@ -31,14 +32,16 @@ const char* AP_PASS       = "12345678";
 #define DUTY_MAX  1966  // 180°
 
 // -------------------------------------------------------------
-// COORDENADAS CALIBRADAS DEL RECTÁNGULO (ZONA SEGURA)
+// COORDENADAS CALIBRADAS DE LAS 4 ESQUINAS (ZONA SEGURA)
+// Se guardan en memoria no volátil (NVS) para persistir tras reinicios
 // -------------------------------------------------------------
-// Centro horizontal: 124° | Lateral: 180° (delta 56°) -> Lateral opuesto: 68°
-// Línea inferior: 81°     | Línea superior: 150°
-const int C_MIN = 81;   // Cabeceo inferior
-const int C_MAX = 150;  // Cabeceo superior
-const int R_MIN = 68;   // Rotación izquierda
-const int R_MAX = 180;  // Rotación derecha
+Preferences prefs;
+
+// Valores por defecto (se sobrescriben al calibrar desde la web)
+int cTL = 150, rTL = 68;   // Esquina Superior Izquierda (u=0, v=0)
+int cTR = 150, rTR = 180;  // Esquina Superior Derecha   (u=1, v=0)
+int cBR = 81,  rBR = 180;  // Esquina Inferior Derecha   (u=1, v=1)
+int cBL = 81,  rBL = 68;   // Esquina Inferior Izquierda (u=0, v=1)
 
 // Pines RGB de la placa
 const int RGB_PINS[] = {48, 38, 21};
@@ -49,11 +52,14 @@ Adafruit_NeoPixel led21(1, 21, NEO_GRB + NEO_KHZ800);
 WebServer server(80);
 
 // Variables de estado
-int anguloCabeceo = 81;
-int anguloRotacion = 68;
+int anguloCabeceo = 115;
+int anguloRotacion = 124;
+float normU = 0.5;
+float normV = 0.5;
 bool estadoLaser = true;
-bool modoRectangulo = true;  // Activo por defecto para iniciar el patrullaje
+bool modoRectangulo = false;
 int ladoActual = 1;
+float pasoPerimetro = 0.0;
 
 unsigned long ultimoDebounce = 0;
 unsigned long ultimoPasoRect = 0;
@@ -87,237 +93,348 @@ void actualizarLaser(bool encender) {
     digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
 }
 
+// Interpolación bilineal dentro del Área Segura: u in [0,1], v in [0,1]
+void moverNormalizado(float u, float v) {
+    u = constrain(u, 0.0f, 1.0f);
+    v = constrain(v, 0.0f, 1.0f);
+    normU = u;
+    normV = v;
+
+    float cTop = cTL * (1.0f - u) + cTR * u;
+    float cBot = cBL * (1.0f - u) + cBR * u;
+    int targetC = round(cTop * (1.0f - v) + cBot * v);
+
+    float rTop = rTL * (1.0f - u) + rTR * u;
+    float rBot = rBL * (1.0f - u) + rBR * u;
+    int targetR = round(rTop * (1.0f - v) + rBot * v);
+
+    moverCabeceoHW(targetC);
+    moverRotacionHW(targetR);
+}
+
+void cargarCalibracion() {
+    prefs.begin("trak_cal", true);
+    cTL = prefs.getInt("cTL", 150);
+    rTL = prefs.getInt("rTL", 68);
+    cTR = prefs.getInt("cTR", 150);
+    rTR = prefs.getInt("rTR", 180);
+    cBR = prefs.getInt("cBR", 81);
+    rBR = prefs.getInt("rBR", 180);
+    cBL = prefs.getInt("cBL", 81);
+    rBL = prefs.getInt("rBL", 68);
+    prefs.end();
+}
+
+void guardarCalibracion() {
+    prefs.begin("trak_cal", false);
+    prefs.putInt("cTL", cTL);
+    prefs.putInt("rTL", rTL);
+    prefs.putInt("cTR", cTR);
+    prefs.putInt("rTR", rTR);
+    prefs.putInt("cBR", cBR);
+    prefs.putInt("rBR", rBR);
+    prefs.putInt("cBL", cBL);
+    prefs.putInt("rBL", rBL);
+    prefs.end();
+}
+
 // -------------------------------------------------------------
-// PÁGINA WEB HTML / CSS / JS EMBEBIDA
+// PÁGINA WEB LOCAL DEL LÁSER (ÁREA SEGURA INTERACTIVA)
 // -------------------------------------------------------------
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32-S3 Rectángulo Calibrado</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TRAK - Control Área Segura</title>
     <style>
         :root {
-            --bg: #0b0f19;
-            --card: rgba(18, 26, 43, 0.92);
-            --border: rgba(255, 255, 255, 0.1);
+            --bg: #070b14;
+            --card: rgba(15, 23, 42, 0.94);
+            --border: rgba(255, 255, 255, 0.12);
             --primary: #00d2ff;
-            --primary-glow: rgba(0, 210, 255, 0.35);
+            --primary-glow: rgba(0, 210, 255, 0.4);
+            --safe: #10b981;
+            --safe-glow: rgba(16, 185, 129, 0.45);
             --laser-on: #ff0055;
             --laser-glow: rgba(255, 0, 85, 0.6);
-            --text: #f0f4f8;
-            --text-dim: #8ba2b5;
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body {
-            background: radial-gradient(circle at 50% 10%, #152238, var(--bg));
+            background: radial-gradient(circle at 50% 0%, #162238, var(--bg));
             color: var(--text);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 14px;
+            user-select: none;
+            -webkit-user-select: none;
         }
         .container {
             width: 100%;
-            max-width: 460px;
+            max-width: 440px;
             background: var(--card);
-            backdrop-filter: blur(16px);
             border: 1px solid var(--border);
             border-radius: 24px;
-            padding: 24px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            padding: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.65);
         }
-        header { text-align: center; margin-bottom: 16px; }
-        header h1 { font-size: 1.35rem; font-weight: 700; color: var(--primary); text-shadow: 0 0 15px var(--primary-glow); }
-        .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; background: rgba(0, 210, 255, 0.15); color: var(--primary); margin-top: 4px; font-weight: 600; }
+        header { text-align: center; margin-bottom: 14px; }
+        header h1 { font-size: 1.25rem; font-weight: 800; color: var(--primary); letter-spacing: 0.5px; text-shadow: 0 0 12px var(--primary-glow); }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: var(--safe); margin-top: 6px; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3); }
         .status-box {
-            background: rgba(0,0,0,0.3);
+            background: rgba(0,0,0,0.35);
             border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 12px;
-            margin-bottom: 16px;
+            padding: 10px;
+            margin-bottom: 14px;
             display: flex;
             justify-content: space-around;
             text-align: center;
         }
-        .status-item span { display: block; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; }
-        .status-item b { font-size: 1.15rem; color: var(--primary); }
-        .control-group {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 16px;
-            padding: 14px;
-            margin-bottom: 12px;
+        .status-item span { display: block; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; }
+        .status-item b { font-size: 1.05rem; color: var(--primary); }
+
+        /* CUADRADO INTERACTIVO DEL ÁREA SEGURA */
+        .touchpad-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: radial-gradient(circle at center, rgba(16, 185, 129, 0.08), rgba(0, 0, 0, 0.55));
+            border: 2px solid var(--safe);
+            border-radius: 18px;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.18), inset 0 0 25px rgba(16, 185, 129, 0.08);
+            margin-bottom: 14px;
+            overflow: hidden;
+            touch-action: none;
+            cursor: crosshair;
         }
-        .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .group-title { font-size: 0.9rem; font-weight: 600; }
-        .val-badge { font-size: 1.05rem; font-weight: 700; color: var(--primary); background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 8px; border: 1px solid var(--border); }
-        input[type=range] { width: 100%; height: 8px; border-radius: 4px; background: #1c273a; outline: none; -webkit-appearance: none; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); cursor: pointer; box-shadow: 0 0 10px var(--primary-glow); }
-        .scale { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--text-dim); margin-top: 4px; }
-        .section-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin: 12px 0 6px; letter-spacing: 0.5px; }
-        .grid-esquinas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .corner-btn { padding: 9px; font-size: 0.75rem; background: rgba(255,255,255,0.04); border-radius: 10px; border: 1px solid var(--border); color: var(--text); }
-        .corner-btn:hover { background: rgba(0, 210, 255, 0.15); border-color: var(--primary); }
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+        .grid-lines {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px);
+            background-size: 25% 25%;
+            pointer-events: none;
+        }
+        .crosshair-center {
+            position: absolute;
+            left: 50%; top: 50%;
+            width: 18px; height: 18px;
+            transform: translate(-50%, -50%);
+            border: 1px dashed rgba(255,255,255,0.35);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .corner-tag {
+            position: absolute;
+            font-size: 0.62rem;
+            font-weight: 700;
+            color: rgba(16, 185, 129, 0.85);
+            padding: 4px 6px;
+            pointer-events: none;
+        }
+        .tag-tl { top: 2px; left: 4px; }
+        .tag-tr { top: 2px; right: 4px; }
+        .tag-bl { bottom: 2px; left: 4px; }
+        .tag-br { bottom: 2px; right: 4px; }
+
+        #laserCursor {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ffffff 18%, #ff0055 45%, rgba(255,0,85,0) 75%);
+            box-shadow: 0 0 18px #ff0055;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+            pointer-events: none;
+            transition: left 0.05s linear, top 0.05s linear;
+        }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         button {
-            padding: 12px;
-            border-radius: 12px;
+            padding: 13px 10px;
+            border-radius: 13px;
             border: 1px solid var(--border);
-            background: rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.06);
             color: var(--text);
-            font-size: 0.88rem;
-            font-weight: 600;
+            font-size: 0.85rem;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
         }
-        button:active { transform: scale(0.97); }
-        .btn-rect {
-            grid-column: span 2;
-            background: rgba(0, 210, 255, 0.15);
-            border-color: rgba(0, 210, 255, 0.4);
-            color: #00d2ff;
-        }
-        .btn-rect.active {
-            background: #00d2ff;
-            color: #06111f;
-            box-shadow: 0 0 20px var(--primary-glow);
+        button:active { transform: scale(0.96); }
+        .btn-center {
+            background: var(--primary);
+            color: #05101d;
+            border-color: var(--primary);
+            box-shadow: 0 0 16px var(--primary-glow);
         }
         .btn-laser {
-            grid-column: span 2;
-            background: rgba(255, 0, 85, 0.12);
-            border-color: rgba(255, 0, 85, 0.3);
+            background: rgba(255, 0, 85, 0.14);
+            border-color: rgba(255, 0, 85, 0.35);
             color: #ff3377;
         }
         .btn-laser.active {
             background: var(--laser-on);
             color: white;
-            box-shadow: 0 0 25px var(--laser-glow);
+            box-shadow: 0 0 22px var(--laser-glow);
         }
-        footer { text-align: center; margin-top: 14px; font-size: 0.72rem; color: var(--text-dim); }
+        .btn-rect {
+            grid-column: span 2;
+            background: rgba(16, 185, 129, 0.14);
+            border-color: rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+        .btn-rect.active {
+            background: var(--safe);
+            color: #05101d;
+            box-shadow: 0 0 20px var(--safe-glow);
+        }
+        footer { text-align: center; margin-top: 12px; font-size: 0.68rem; color: var(--text-dim); }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>ZONA SEGURA RECTANGULAR</h1>
-            <div class="badge" id="ladoBadge">Lado 1: Inferior (Azul)</div>
+            <h1>⚡ TRAK ÁREA SEGURA</h1>
+            <div class="badge" id="ladoBadge">Pulsa en el cuadrado para mover el láser</div>
         </header>
 
         <div class="status-box">
-            <div class="status-item"><span>Cabeceo (Arriba/Abajo)</span><b id="statusC">81°</b></div>
-            <div class="status-item"><span>Rotación (Eje)</span><b id="statusR">68°</b></div>
+            <div class="status-item"><span>Posición (X, Y)</span><b id="statusXY">50%, 50%</b></div>
+            <div class="status-item"><span>Cabeceo</span><b id="statusC">--°</b></div>
+            <div class="status-item"><span>Rotación</span><b id="statusR">--°</b></div>
             <div class="status-item"><span>Láser</span><b id="statusL">ON</b></div>
         </div>
 
-        <!-- BOTONES PRINCIPALES -->
+        <div class="touchpad-wrapper" id="safePad">
+            <div class="grid-lines"></div>
+            <div class="crosshair-center"></div>
+            <span class="corner-tag tag-tl" id="tagTL">TL</span>
+            <span class="corner-tag tag-tr" id="tagTR">TR</span>
+            <span class="corner-tag tag-bl" id="tagBL">BL</span>
+            <span class="corner-tag tag-br" id="tagBR">BR</span>
+            <div id="laserCursor"></div>
+        </div>
+
         <div class="btn-grid">
-            <button id="btnRect" class="btn-rect active" onclick="toggleRect()">
-                📐 Seguir Perímetro del Rectángulo
-            </button>
-            <button id="btnLaser" class="btn-laser active" onclick="toggleLaser()">
-                ⚡ LÁSER: <span id="laserText">ENCENDIDO</span>
-            </button>
+            <button class="btn-center" onclick="irAlCentro()">🎯 Centro Área Segura</button>
+            <button id="btnLaser" class="btn-laser active" onclick="toggleLaser()">⚡ Láser: <span id="laserText">ON</span></button>
+            <button id="btnRect" class="btn-rect" onclick="toggleRect()">📐 Patrullar Perímetro del Área Segura</button>
         </div>
 
-        <!-- ESQUINAS CALIBRADAS -->
-        <div class="section-label">Saltar a Esquinas Calibradas:</div>
-        <div class="grid-esquinas">
-            <button class="corner-btn" onclick="moverEsquina(150, 68)">↖ Sup-Izq (150°, 68°)</button>
-            <button class="corner-btn" onclick="moverEsquina(150, 180)">↗ Sup-Der (150°, 180°)</button>
-            <button class="corner-btn" onclick="moverEsquina(81, 68)">↙ Inf-Izq (81°, 68°)</button>
-            <button class="corner-btn" onclick="moverEsquina(81, 180)">↘ Inf-Der (81°, 180°)</button>
-        </div>
-
-        <!-- SLIDERS MANUALES -->
-        <div class="section-label">Ajuste Manual Fino:</div>
-        <div class="control-group">
-            <div class="group-header">
-                <span class="group-title">Cabeceo [81° a 150°]</span>
-                <span class="val-badge" id="valCabeceo">81°</span>
-            </div>
-            <input type="range" id="sliderCabeceo" min="0" max="180" value="81" oninput="actualizarSlider(this, 'valCabeceo')" onchange="enviarServos()">
-            <div class="scale"><span>0°</span><span>81° (Inf)</span><span>150° (Sup)</span><span>180°</span></div>
-        </div>
-
-        <div class="control-group">
-            <div class="group-header">
-                <span class="group-title">Rotación [68° a 180°]</span>
-                <span class="val-badge" id="valRotacion">68°</span>
-            </div>
-            <input type="range" id="sliderRotacion" min="0" max="180" value="68" oninput="actualizarSlider(this, 'valRotacion')" onchange="enviarServos()">
-            <div class="scale"><span>0°</span><span>68° (Izq)</span><span>124° (Centro)</span><span>180° (Der)</span></div>
-        </div>
-
-        <footer>Calibración: [81°..150°] x [68°..180°] | LED activo en ESP32</footer>
+        <footer id="calFooter">Cargando calibración...</footer>
     </div>
 
     <script>
-        function actualizarSlider(slider, badgeId) {
-            document.getElementById(badgeId).innerText = slider.value + '°';
+        const pad = document.getElementById('safePad');
+        const cursor = document.getElementById('laserCursor');
+        let dragging = false;
+        let lastSend = 0;
+
+        function enviarCoordenada(u, v, force = false) {
+            u = Math.max(0, Math.min(1, u));
+            v = Math.max(0, Math.min(1, v));
+
+            cursor.style.left = (u * 100) + '%';
+            cursor.style.top = (v * 100) + '%';
+            document.getElementById('statusXY').innerText = `${Math.round(u*100)}%, ${Math.round(v*100)}%`;
+
+            const now = Date.now();
+            if (!force && now - lastSend < 65) return;
+            lastSend = now;
+
+            fetch(`/api/move_norm?u=${u.toFixed(3)}&v=${v.toFixed(3)}`, { method: 'POST' })
+                .then(r => r.json())
+                .then(aplicarEstado)
+                .catch(() => {});
         }
-        function enviarServos() {
-            const c = document.getElementById('sliderCabeceo').value;
-            const r = document.getElementById('sliderRotacion').value;
-            fetch('/api/servo?cabeceo=' + c + '&rotacion=' + r, { method: 'POST' });
+
+        function procesarEventoPad(e, force = false) {
+            const rect = pad.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const u = (clientX - rect.left) / rect.width;
+            const v = (clientY - rect.top) / rect.height;
+            enviarCoordenada(u, v, force);
         }
-        function moverEsquina(c, r) {
-            fetch('/api/servo?cabeceo=' + c + '&rotacion=' + r, { method: 'POST' }).then(r=>r.json()).then(aplicarEstado);
+
+        pad.addEventListener('pointerdown', (e) => { dragging = true; procesarEventoPad(e, true); });
+        pad.addEventListener('pointermove', (e) => { if (dragging) procesarEventoPad(e, false); });
+        window.addEventListener('pointerup', () => { dragging = false; });
+
+        function irAlCentro() {
+            enviarCoordenada(0.5, 0.5, true);
         }
+
         function toggleRect() {
-            fetch('/api/rect/toggle', { method: 'POST' }).then(r=>r.json()).then(aplicarEstado);
+            fetch('/api/rect/toggle', { method: 'POST' }).then(r => r.json()).then(aplicarEstado);
         }
+
         function toggleLaser() {
-            fetch('/api/laser/toggle', { method: 'POST' }).then(r=>r.json()).then(aplicarEstado);
+            fetch('/api/laser/toggle', { method: 'POST' }).then(r => r.json()).then(aplicarEstado);
         }
+
         function aplicarEstado(data) {
             document.getElementById('statusC').innerText = data.cabeceo + '°';
             document.getElementById('statusR').innerText = data.rotacion + '°';
-            document.getElementById('sliderCabeceo').value = data.cabeceo;
-            document.getElementById('sliderRotacion').value = data.rotacion;
-            document.getElementById('valCabeceo').innerText = data.cabeceo + '°';
-            document.getElementById('valRotacion').innerText = data.rotacion + '°';
+
+            if (!dragging && data.u !== undefined && data.v !== undefined) {
+                cursor.style.left = (data.u * 100) + '%';
+                cursor.style.top = (data.v * 100) + '%';
+                document.getElementById('statusXY').innerText = `${Math.round(data.u*100)}%, ${Math.round(data.v*100)}%`;
+            }
+
+            if (data.cal) {
+                document.getElementById('tagTL').innerText = `TL (${data.cal.cTL}°/${data.cal.rTL}°)`;
+                document.getElementById('tagTR').innerText = `TR (${data.cal.cTR}°/${data.cal.rTR}°)`;
+                document.getElementById('tagBL').innerText = `BL (${data.cal.cBL}°/${data.cal.rBL}°)`;
+                document.getElementById('tagBR').innerText = `BR (${data.cal.cBR}°/${data.cal.rBR}°)`;
+                document.getElementById('calFooter').innerText = `Esquinas guardadas en ESP32 NVS | Listo`;
+            }
 
             const btnR = document.getElementById('btnRect');
             const ladoB = document.getElementById('ladoBadge');
             if (data.rect) {
                 btnR.classList.add('active');
-                btnR.innerText = '⏸️ Pausar Recorrido del Rectángulo';
-                const nombresLados = [
-                    "",
-                    "Lado 1: Base Inferior (Azul)",
-                    "Lado 2: Subida Derecha (Verde)",
-                    "Lado 3: Borde Superior (Amarillo)",
-                    "Lado 4: Bajada Izquierda (Rojo/Magenta)"
-                ];
-                ladoB.innerText = nombresLados[data.lado] || "Siguiendo Perímetro";
+                btnR.innerText = '⏸️ Pausar Patrullaje del Área Segura';
+                ladoB.innerText = `Patrullando Lado ${data.lado} / 4`;
             } else {
                 btnR.classList.remove('active');
-                btnR.innerText = '📐 Seguir Perímetro del Rectángulo';
-                ladoB.innerText = 'Control Manual / Pausa';
+                btnR.innerText = '📐 Patrullar Perímetro del Área Segura';
+                ladoB.innerText = 'Pulsa en el cuadrado para mover el láser';
             }
 
             const btnL = document.getElementById('btnLaser');
             const statusL = document.getElementById('statusL');
             if (data.laser) {
                 btnL.classList.add('active');
-                document.getElementById('laserText').innerText = 'ENCENDIDO';
+                document.getElementById('laserText').innerText = 'ON';
                 statusL.innerText = 'ON';
                 statusL.style.color = '#ff0055';
             } else {
                 btnL.classList.remove('active');
-                document.getElementById('laserText').innerText = 'APAGADO';
+                document.getElementById('laserText').innerText = 'OFF';
                 statusL.innerText = 'OFF';
-                statusL.style.color = '#8ba2b5';
+                statusL.style.color = '#94a3b8';
             }
         }
+
         function refrescar() {
-            fetch('/api/status').then(r=>r.json()).then(aplicarEstado).catch(()=>{});
+            if (!dragging) {
+                fetch('/api/status').then(r => r.json()).then(aplicarEstado).catch(() => {});
+            }
         }
         refrescar();
-        setInterval(refrescar, 400);
+        setInterval(refrescar, 500);
     </script>
 </body>
 </html>
@@ -326,9 +443,15 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 String jsonEstado() {
     return String("{\"cabeceo\":") + anguloCabeceo +
            ",\"rotacion\":" + anguloRotacion +
+           ",\"u\":" + String(normU, 3) +
+           ",\"v\":" + String(normV, 3) +
            ",\"laser\":" + (estadoLaser ? "true" : "false") +
            ",\"rect\":" + (modoRectangulo ? "true" : "false") +
-           ",\"lado\":" + ladoActual + "}";
+           ",\"lado\":" + ladoActual +
+           ",\"cal\":{\"cTL\":" + cTL + ",\"rTL\":" + rTL +
+           ",\"cTR\":" + cTR + ",\"rTR\":" + rTR +
+           ",\"cBR\":" + cBR + ",\"rBR\":" + rBR +
+           ",\"cBL\":" + cBL + ",\"rBL\":" + rBL + "}}";
 }
 
 void handleRoot() { server.send(200, "text/html", INDEX_HTML); }
@@ -336,11 +459,47 @@ void handleStatus() { server.send(200, "application/json", jsonEstado()); }
 
 void handleSetServo() {
     if (server.hasArg("cabeceo") && server.hasArg("rotacion")) {
-        modoRectangulo = false; // El ajuste manual pausa el recorrido automático
+        modoRectangulo = false;
         int c = server.arg("cabeceo").toInt();
         int r = server.arg("rotacion").toInt();
         moverCabeceoHW(c);
         moverRotacionHW(r);
+    }
+    server.send(200, "application/json", jsonEstado());
+}
+
+void handleMoveNorm() {
+    if (server.hasArg("u") && server.hasArg("v")) {
+        modoRectangulo = false;
+        float u = server.arg("u").toFloat();
+        float v = server.arg("v").toFloat();
+        moverNormalizado(u, v);
+    }
+    server.send(200, "application/json", jsonEstado());
+}
+
+void handleCenter() {
+    modoRectangulo = false;
+    moverNormalizado(0.5f, 0.5f);
+    server.send(200, "application/json", jsonEstado());
+}
+
+void handleSafeArea() {
+    if (server.hasArg("cTL") && server.hasArg("rTL") &&
+        server.hasArg("cTR") && server.hasArg("rTR") &&
+        server.hasArg("cBR") && server.hasArg("rBR") &&
+        server.hasArg("cBL") && server.hasArg("rBL")) {
+        cTL = constrain(server.arg("cTL").toInt(), 0, 180);
+        rTL = constrain(server.arg("rTL").toInt(), 0, 180);
+        cTR = constrain(server.arg("cTR").toInt(), 0, 180);
+        rTR = constrain(server.arg("rTR").toInt(), 0, 180);
+        cBR = constrain(server.arg("cBR").toInt(), 0, 180);
+        rBR = constrain(server.arg("rBR").toInt(), 0, 180);
+        cBL = constrain(server.arg("cBL").toInt(), 0, 180);
+        rBL = constrain(server.arg("rBL").toInt(), 0, 180);
+        guardarCalibracion();
+        modoRectangulo = false;
+        moverNormalizado(0.5f, 0.5f);
     }
     server.send(200, "application/json", jsonEstado());
 }
@@ -354,6 +513,8 @@ void handleToggleRect() {
     modoRectangulo = !modoRectangulo;
     if (modoRectangulo) {
         actualizarLaser(true);
+        ladoActual = 1;
+        pasoPerimetro = 0.0f;
     }
     server.send(200, "application/json", jsonEstado());
 }
@@ -365,11 +526,13 @@ void setup() {
 
     pinMode(PIN_BOTON, INPUT_PULLUP);
     pinMode(PIN_LASER, OUTPUT);
-    actualizarLaser(true); // Láser encendido para proyectar el rectángulo
+    actualizarLaser(true);
 
     led48.begin();
     led38.begin();
     led21.begin();
+
+    cargarCalibracion();
 
     // Configurar LEDC
     ledcSetup(CANAL_CABECEO, PWM_FREQ, PWM_RES);
@@ -378,15 +541,9 @@ void setup() {
     ledcSetup(CANAL_ROTACION, PWM_FREQ, PWM_RES);
     ledcAttachPin(PIN_ROTACION, CANAL_ROTACION);
 
-    // Posición inicial: Esquina 1 (Inferior Izquierda: Cabeceo 81°, Rotación 68°)
-    anguloCabeceo = C_MIN;
-    anguloRotacion = R_MIN;
-    ladoActual = 1;
-    moverCabeceoHW(anguloCabeceo);
-    moverRotacionHW(anguloRotacion);
-
-    // Color inicial Lado 1: Azul
-    ponerColorLed(0, 150, 255);
+    // Iniciar en el centro del Área Segura calibrada
+    moverNormalizado(0.5f, 0.5f);
+    ponerColorLed(0, 180, 255);
 
     // Wi-Fi Dual
     WiFi.persistent(false);
@@ -399,6 +556,9 @@ void setup() {
     server.on("/", HTTP_GET, handleRoot);
     server.on("/api/status", HTTP_GET, handleStatus);
     server.on("/api/servo", HTTP_POST, handleSetServo);
+    server.on("/api/move_norm", HTTP_POST, handleMoveNorm);
+    server.on("/api/center", HTTP_POST, handleCenter);
+    server.on("/api/safe_area", HTTP_POST, handleSafeArea);
     server.on("/api/laser/toggle", HTTP_POST, handleToggleLaser);
     server.on("/api/rect/toggle", HTTP_POST, handleToggleRect);
     server.begin();
@@ -413,75 +573,46 @@ void loop() {
     ArduinoOTA.handle();
     server.handleClient();
 
-    // Botón físico BOOT alterna el patrullaje del rectángulo
     if (digitalRead(PIN_BOTON) == LOW) {
         if (millis() - ultimoDebounce > 300) {
             ultimoDebounce = millis();
             modoRectangulo = !modoRectangulo;
-            if (modoRectangulo) actualizarLaser(true);
+            if (modoRectangulo) {
+                actualizarLaser(true);
+                ladoActual = 1;
+                pasoPerimetro = 0.0f;
+            }
         }
     }
 
-    // -------------------------------------------------------------
-    // PATRULLAJE CONTINUO DEL PERÍMETRO DEL RECTÁNGULO
-    // Cada paso cambia suavemente y la luz LED cambia con cada lado
-    // -------------------------------------------------------------
+    // Patrullaje continuo usando las 4 esquinas calibradas (u, v)
     if (modoRectangulo) {
-        if (millis() - ultimoPasoRect >= 22) { // Control de velocidad constante y suave
+        if (millis() - ultimoPasoRect >= 25) {
             ultimoPasoRect = millis();
-
-            switch (ladoActual) {
-                // LADO 1: Base Inferior (de Esquina 1 a Esquina 2)
-                // Cabeceo fijo en 81° | Rotación avanza de 68° a 180°
-                case 1:
-                    ponerColorLed(0, 150, 255); // LED en AZUL CIAN
-                    anguloCabeceo = C_MIN;
-                    anguloRotacion++;
-                    if (anguloRotacion >= R_MAX) {
-                        anguloRotacion = R_MAX;
-                        ladoActual = 2; // Pasa a subir por la derecha
-                    }
-                    break;
-
-                // LADO 2: Lateral Derecho (de Esquina 2 a Esquina 3)
-                // Rotación fija en 180° | Cabeceo sube de 81° a 150°
-                case 2:
-                    ponerColorLed(0, 255, 60); // LED en VERDE ESMERALDA
-                    anguloRotacion = R_MAX;
-                    anguloCabeceo++;
-                    if (anguloCabeceo >= C_MAX) {
-                        anguloCabeceo = C_MAX;
-                        ladoActual = 3; // Pasa a avanzar por el techo
-                    }
-                    break;
-
-                // LADO 3: Borde Superior (de Esquina 3 a Esquina 4)
-                // Cabeceo fijo en 150° | Rotación retrocede de 180° a 68°
-                case 3:
-                    ponerColorLed(255, 220, 0); // LED en AMARILLO ORO
-                    anguloCabeceo = C_MAX;
-                    anguloRotacion--;
-                    if (anguloRotacion <= R_MIN) {
-                        anguloRotacion = R_MIN;
-                        ladoActual = 4; // Pasa a bajar por la izquierda
-                    }
-                    break;
-
-                // LADO 4: Lateral Izquierdo (de Esquina 4 a Esquina 1)
-                // Rotación fija en 68° | Cabeceo baja de 150° a 81°
-                case 4:
-                    ponerColorLed(255, 0, 100); // LED en ROJO / MAGENTA
-                    anguloRotacion = R_MIN;
-                    anguloCabeceo--;
-                    if (anguloCabeceo <= C_MIN) {
-                        anguloCabeceo = C_MIN;
-                        ladoActual = 1; // Completa el rectángulo y reinicia
-                    }
-                    break;
+            pasoPerimetro += 0.02f;
+            if (pasoPerimetro >= 1.0f) {
+                pasoPerimetro = 0.0f;
+                ladoActual = (ladoActual % 4) + 1;
             }
 
-            moverCabeceoHW(anguloCabeceo);
-            moverRotacionHW(anguloRotacion);
+            switch (ladoActual) {
+                case 1: // TL -> TR (Borde superior)
+                    ponerColorLed(0, 150, 255);
+                    moverNormalizado(pasoPerimetro, 0.0f);
+                    break;
+                case 2: // TR -> BR (Lateral derecho)
+                    ponerColorLed(0, 255, 60);
+                    moverNormalizado(1.0f, pasoPerimetro);
+                    break;
+                case 3: // BR -> BL (Borde inferior)
+                    ponerColorLed(255, 220, 0);
+                    moverNormalizado(1.0f - pasoPerimetro, 1.0f);
+                    break;
+                case 4: // BL -> TL (Lateral izquierdo)
+                    ponerColorLed(255, 0, 100);
+                    moverNormalizado(0.0f, 1.0f - pasoPerimetro);
+                    break;
+            }
         }
     }
 }

@@ -51,12 +51,30 @@ class ServoTarget(BaseModel):
     cabeceo: int
     rotacion: int
 
+class NormTarget(BaseModel):
+    u: float
+    v: float
+
+class SafeAreaCorners(BaseModel):
+    cTL: int
+    rTL: int
+    cTR: int
+    rTR: int
+    cBR: int
+    rBR: int
+    cBL: int
+    rBL: int
+
 class AlignRequest(BaseModel):
     image_base64: str
     target_x: float  # 0.0 a 1.0 (pantalla del celular)
     target_y: float  # 0.0 a 1.0 (pantalla del celular)
     cabeceo_actual: int
     rotacion_actual: int
+    dx_dcab: float = 0.0
+    dx_drot: float = 0.0
+    dy_dcab: float = 0.0
+    dy_drot: float = 0.0
 
 def decodificar_imagen(base64_str: str) -> np.ndarray:
     if "," in base64_str:
@@ -210,12 +228,68 @@ def proxy_status():
     except Exception as e:
         return {"error": f"No se pudo comunicar con ESP32: {str(e)}"}
 
+@app.post("/api/esp32/move_norm")
+def proxy_move_norm(target: NormTarget):
+    try:
+        url = f"{ESP32_URL}/api/move_norm?u={target.u}&v={target.v}"
+        res = requests.post(url, timeout=2)
+        return res.json()
+    except Exception as e:
+        return {"error": f"No se pudo comunicar con ESP32: {str(e)}"}
+
+@app.post("/api/esp32/center")
+def proxy_center():
+    try:
+        url = f"{ESP32_URL}/api/center"
+        res = requests.post(url, timeout=2)
+        return res.json()
+    except Exception as e:
+        return {"error": f"No se pudo comunicar con ESP32: {str(e)}"}
+
+@app.post("/api/esp32/rect")
+def proxy_rect():
+    try:
+        url = f"{ESP32_URL}/api/rect/toggle"
+        res = requests.post(url, timeout=2)
+        return res.json()
+    except Exception as e:
+        return {"error": f"No se pudo comunicar con ESP32: {str(e)}"}
+
+@app.post("/api/save_safe_area")
+def save_safe_area(corners: SafeAreaCorners):
+    import json
+    cal_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "safe_area.json")
+    data = corners.model_dump()
+    with open(cal_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    try:
+        url = (
+            f"{ESP32_URL}/api/safe_area?"
+            f"cTL={corners.cTL}&rTL={corners.rTL}&"
+            f"cTR={corners.cTR}&rTR={corners.rTR}&"
+            f"cBR={corners.cBR}&rBR={corners.rBR}&"
+            f"cBL={corners.cBL}&rBL={corners.rBL}"
+        )
+        res = requests.post(url, timeout=3)
+        return {"saved": True, "esp32": res.json(), "corners": data}
+    except Exception as e:
+        return {"saved": True, "esp32_error": str(e), "corners": data}
+
+@app.get("/api/safe_area")
+def get_safe_area():
+    import json
+    cal_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "safe_area.json")
+    if os.path.exists(cal_path):
+        with open(cal_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"cTL": 150, "rTL": 68, "cTR": 150, "rTR": 180, "cBR": 81, "rBR": 180, "cBL": 81, "rBL": 68}
+
 @app.post("/api/align_step")
 def align_step(req: AlignRequest):
     """
-    Paso de calibración asistida:
+    Paso de calibración asistida con Jacobiano 2x2:
     Calcula el error (dx, dy) entre el láser actual y el objetivo tocado por el usuario,
-    y ajusta los servos de cabeceo y rotación proporcionalmente.
+    e invierte el Jacobiano medido para mover los servos exactamente al punto objetivo.
     """
     img = decodificar_imagen(req.image_base64)
     lx, ly, detected, _ = detectar_laser_opencv(img)
@@ -229,15 +303,44 @@ def align_step(req: AlignRequest):
         }
 
     # Error en coordenadas normalizadas [-1.0, 1.0]
-    err_x = req.target_x - lx  # Horizontal (afecta rotación)
-    err_y = req.target_y - ly  # Vertical (afecta cabeceo)
+    err_x = req.target_x - lx
+    err_y = req.target_y - ly
 
-    # Ganancia proporcional (grados por delta de pantalla)
-    KP_ROT = 28.0
-    KP_CAB = 28.0
+    distancia = (err_x**2 + err_y**2)**0.5
+    alineado = distancia < 0.025  # Menos del 2.5% de tolerancia
 
-    delta_rot = int(err_x * KP_ROT)
-    delta_cab = int(-err_y * KP_CAB) # Invertido según montaje de cámara
+    if alineado:
+        return {
+            "status": "aligned",
+            "laser_x": lx,
+            "laser_y": ly,
+            "target_x": req.target_x,
+            "target_y": req.target_y,
+            "distancia": round(distancia, 4),
+            "nuevo_cabeceo": req.cabeceo_actual,
+            "nueva_rotacion": req.rotacion_actual,
+            "alineado": True
+        }
+
+    det = req.dx_dcab * req.dy_drot - req.dx_drot * req.dy_dcab
+    if abs(det) > 1e-6:
+        # Usar matriz inversa del Jacobiano medido con amortiguación 0.75
+        raw_dcab = (req.dy_drot * err_x - req.dx_drot * err_y) / det
+        raw_drot = (-req.dy_dcab * err_x + req.dx_dcab * err_y) / det
+        delta_cab = int(round(max(-22.0, min(22.0, raw_dcab * 0.75))))
+        delta_rot = int(round(max(-22.0, min(22.0, raw_drot * 0.75))))
+    else:
+        # Fallback proporcional si no hay Jacobiano
+        KP_ROT = 28.0
+        KP_CAB = 28.0
+        delta_rot = int(err_x * KP_ROT)
+        delta_cab = int(-err_y * KP_CAB)
+
+    # Asegurar al menos 1 grado de movimiento si no está alineado y el cálculo dio 0
+    if delta_cab == 0 and abs(err_y) > 0.015:
+        delta_cab = 1 if (abs(det) > 1e-6 and raw_dcab > 0) or (abs(det) <= 1e-6 and err_y < 0) else -1
+    if delta_rot == 0 and abs(err_x) > 0.015:
+        delta_rot = 1 if (abs(det) > 1e-6 and raw_drot > 0) or (abs(det) <= 1e-6 and err_x > 0) else -1
 
     nuevo_cabeceo = max(0, min(180, req.cabeceo_actual + delta_cab))
     nueva_rotacion = max(0, min(180, req.rotacion_actual + delta_rot))
@@ -249,11 +352,8 @@ def align_step(req: AlignRequest):
     except:
         pass
 
-    distancia = (err_x**2 + err_y**2)**0.5
-    alineado = distancia < 0.025  # Menos del 2.5% de tolerancia
-
     return {
-        "status": "aligned" if alineado else "adjusting",
+        "status": "adjusting",
         "laser_x": lx,
         "laser_y": ly,
         "target_x": req.target_x,
@@ -261,7 +361,7 @@ def align_step(req: AlignRequest):
         "distancia": round(distancia, 4),
         "nuevo_cabeceo": nuevo_cabeceo,
         "nueva_rotacion": nueva_rotacion,
-        "alineado": alineado
+        "alineado": False
     }
 
 if __name__ == "__main__":
