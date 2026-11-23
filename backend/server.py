@@ -154,15 +154,32 @@ def api_gemini_analyze(payload: ImagePayload):
             "debe moverse el gimbal para alcanzar la zona deseada. Responde de forma concisa y técnica."
         )
 
-        response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[
-                types.Part.from_bytes(data=img_bytes, mime_type='image/jpeg'),
-                prompt_text,
-            ],
-        )
+        # Prioridad Gemini 3.8 Flash, con fallback a 3.7 y 3.5 en caso de alta demanda
+        models_to_try = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
+        response_text = None
+        selected_model = None
 
-        return {"analysis": response.text}
+        for model_candidate in models_to_try:
+            try:
+                response = ai_client.models.generate_content(
+                    model=model_candidate,
+                    contents=[
+                        types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"),
+                        prompt_text
+                    ]
+                )
+                if response and response.text:
+                    response_text = response.text
+                    selected_model = model_candidate
+                    break
+            except Exception as model_err:
+                print(f"Aviso: {model_candidate} con pico de demanda, probando siguiente modelo...")
+                continue
+
+        if not response_text:
+            return JSONResponse(status_code=500, content={"error": "Modelos de Gemini en alta demanda temporal. Reintenta en unos segundos."})
+
+        return {"analysis": response_text, "model": selected_model}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 

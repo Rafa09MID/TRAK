@@ -258,13 +258,13 @@
             <button onclick="limpiarEsquinas()">🗑️ Borrar Esquinas</button>
             <button class="btn-primary" id="btnAutoCalibrar" onclick="autoCalibrar()">🎯 Auto-Calibrar</button>
             <button onclick="centrarGimbal()">🎯 Centro (90°)</button>
-            <button class="btn-gemini" onclick="analizarConGemini()">🧠 Analizar con Gemini IA</button>
+            <button class="btn-gemini" onclick="analizarConGemini()">🧠 Analizar con Gemini 3.8 IA</button>
         </div>
     </div>
 
     <div id="geminiModal">
         <div class="modal-card">
-            <h3>🧠 Análisis Visual Gemini</h3>
+            <h3 id="geminiModalTitle">🧠 Análisis Visual Gemini 3.8 Flash</h3>
             <p id="geminiText">Analizando escena...</p>
             <button class="modal-close" onclick="cerrarModal()">Cerrar</button>
         </div>
@@ -581,7 +581,8 @@
 
         async function analizarConGemini() {
             document.getElementById('geminiModal').style.display = 'flex';
-            document.getElementById('geminiText').innerText = "Capturando foto y consultando con Gemini 2.5 Flash...";
+            document.getElementById('geminiModalTitle').innerText = "🧠 Análisis Visual (Gemini 3.8 Flash)";
+            document.getElementById('geminiText').innerText = "Capturando foto y consultando con Gemini 3.8 Flash en AI Studio...";
 
             const snap = document.createElement('canvas');
             snap.width = 640;
@@ -597,6 +598,9 @@
                     body: JSON.stringify({ image_base64: b64 })
                 });
                 const d = await res.json();
+                if (d.model) {
+                    document.getElementById('geminiModalTitle').innerText = `🧠 Análisis Visual (${d.model})`;
+                }
                 document.getElementById('geminiText').innerText = d.analysis || d.error || "Sin respuesta.";
             } catch (e) {
                 document.getElementById('geminiText').innerText = "Error al conectar: " + e.message;
