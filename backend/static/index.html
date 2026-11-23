@@ -422,6 +422,23 @@
                 <button class="btn btn-blue" onclick="enviarComando()">Ir</button>
             </div>
 
+            <div class="card" id="cornerConfirmCard" style="display:none; border-color: rgba(52, 199, 89, 0.4);">
+                <div class="id-header" style="margin-bottom: 10px;">
+                    <span class="id-title" style="color: var(--green);" id="confirmCornerTitle">Confirmar Esquina (-5, 5)</span>
+                    <span class="id-model" id="confirmAnglesText">--° / --°</span>
+                </div>
+                <div class="action-grid" style="grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;">
+                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(2, 0)">Arriba</button>
+                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(-2, 0)">Abajo</button>
+                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(0, -2)">Izq</button>
+                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(0, 2)">Der</button>
+                </div>
+                <div class="action-grid">
+                    <button class="btn btn-green" id="btnConfirmCorner">Confirmar Esquina</button>
+                    <button class="btn" id="btnCancelCalib">Cancelar</button>
+                </div>
+            </div>
+
             <div class="action-grid">
                 <button class="btn btn-indigo btn-full" id="btnIdentify" onclick="identificarYSenalar()">Identificar con IA</button>
                 <button class="btn btn-blue" id="btnAutoCalibrar" onclick="autoCalibrar()">Auto-Calibrar</button>
@@ -851,6 +868,33 @@
             await new Promise(r => setTimeout(r, waitMs));
         }
 
+        let confirmResolver = null;
+
+        async function ajusteFinoEsquina(dCab, dRot) {
+            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 250);
+            document.getElementById('confirmAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
+        }
+
+        function esperarConfirmacionUsuario(coordLabel) {
+            return new Promise((resolve) => {
+                const card = document.getElementById('cornerConfirmCard');
+                card.style.display = 'block';
+                document.getElementById('confirmCornerTitle').innerText = `Confirmar Esquina ${coordLabel}`;
+                document.getElementById('confirmAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
+                document.getElementById('btnConfirmCorner').innerText = `Confirmar ${coordLabel}`;
+
+                confirmResolver = resolve;
+                document.getElementById('btnConfirmCorner').onclick = () => {
+                    card.style.display = 'none';
+                    resolve(true);
+                };
+                document.getElementById('btnCancelCalib').onclick = () => {
+                    card.style.display = 'none';
+                    resolve(false);
+                };
+            });
+        }
+
         async function autoCalibrar() {
             const rectArea = obtenerRectanguloObjetivo();
             if (!rectArea) {
@@ -1016,11 +1060,19 @@
                     await new Promise(r => setTimeout(r, 550));
                 }
 
-                // Confirmar posicion final visible de la esquina
+                // Esperar confirmacion manual del usuario (con ajuste fino opcional)
+                document.getElementById('stepBadge').innerText = `Confirmar ${i+1}/4`;
+                document.getElementById('instructionText').innerText = `Verifica la esquina ${t.coordLabel} y pulsa Confirmar.`;
+                const confirmado = await esperarConfirmacionUsuario(t.coordLabel);
+                if (!confirmado) {
+                    calibrando = false;
+                    actualizarUIEsquinas();
+                    return;
+                }
+
+                // Confirmar posicion final visible tras confirmacion/ajuste del usuario
                 const finalCheck = await medirPosicionLaser();
-                if (!finalCheck.detected) {
-                    await moverServos(lastValidCab, lastValidRot, 600);
-                } else {
+                if (finalCheck.detected) {
                     lastLx = finalCheck.x;
                     lastLy = finalCheck.y;
                 }
