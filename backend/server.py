@@ -142,51 +142,45 @@ def llamar_gemini_rapido(img_bytes: bytes, prompt_text: str, json_mode: bool = F
 
 def detectar_laser_opencv(img_bgr: np.ndarray):
     """
-    Detector de alta precisión calibrado para cámara de celular:
-    Detecta el núcleo blanco-rosado saturado y halo rojo del láser en cualquier condición de luz.
-    Filtra reflejos grandes y prioriza puntos concentrados de alta intensidad.
+    Detector anti-reflejos basado en Top-Hat morfológico:
+    Aísla únicamente picos puntuales de alta intensidad roja/blanca-rosada
+    e ignora reflejos amplios, cajas de cartón o iluminación cálida.
     """
     h, w = img_bgr.shape[:2]
-    
-    # 1. Filtro en espacio HSV con saturación permisiva para sensores saturados
-    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
-    mask1 = cv2.inRange(hsv, np.array([0, 25, 150]), np.array([18, 255, 255]))
-    mask2 = cv2.inRange(hsv, np.array([155, 25, 150]), np.array([180, 255, 255]))
-    hsv_mask = cv2.bitwise_or(mask1, mask2)
-
-    # 2. Filtro diferencial en canales BGR (el canal Rojo supera fuertemente al Verde y Azul)
     b, g, r = cv2.split(img_bgr)
-    diff_mask = (r > g + 15) & (r > b + 10) & (r > 140)
-    
-    # Combinar ambas condiciones
-    laser_mask = cv2.bitwise_and(hsv_mask, diff_mask.astype(np.uint8) * 255)
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+    v = hsv[:, :, 2]
+
+    # 1. Top-Hat morfológico para aislar puntos láser y suprimir reflejos/fondos amplios
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
+    tophat_r = cv2.morphologyEx(r, cv2.MORPH_TOPHAT, kernel)
+
+    # 2. Regla espectral: pico puntual en Rojo + brillo alto + dominancia de rojo sobre G y B
+    r16 = r.astype(np.int16)
+    red_dom = (r16 - g.astype(np.int16) > 15) & (r16 - b.astype(np.int16) > 10)
+    laser_mask = ((tophat_r > 50) & (v > 180) & red_dom).astype(np.uint8) * 255
 
     contours, _ = cv2.findContours(laser_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Filtrar solo contornos que tengan tamaño compatible con un láser (radio entre 1 y 40 px)
     laser_candidates = []
     for c in contours:
+        area = cv2.contourArea(c)
+        if area < 4.0:
+            continue
         (cx, cy), radius = cv2.minEnclosingCircle(c)
-        if 1.0 <= radius <= 45.0:
-            area = cv2.contourArea(c)
-            # Intensidad en el centro
+        if 1.5 <= radius <= 28.0:
             ix, iy = int(np.clip(cx, 0, w - 1)), int(np.clip(cy, 0, h - 1))
-            val = int(r[iy, ix])
+            peak_score = float(tophat_r[iy, ix]) + float(v[iy, ix]) * 0.5 + float(r16[iy, ix] - g[iy, ix])
             laser_candidates.append({
-                "cx": cx, "cy": cy, "radius": radius,
-                "score": val * 2.0 - (int(g[iy, ix]) + int(b[iy, ix]))
+                "cx": cx,
+                "cy": cy,
+                "radius": radius,
+                "score": peak_score
             })
 
     if laser_candidates:
-        # Elegir el candidato con mayor intensidad diferencial
         best = max(laser_candidates, key=lambda k: k["score"])
         return round(best["cx"] / w, 4), round(best["cy"] / h, 4), True, round(best["radius"], 1)
-
-    # Fallback: Máximo pico diferencial de intensidad roja en la imagen completa
-    score = r.astype(np.float32) * 2.0 - (g.astype(np.float32) + b.astype(np.float32))
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(score)
-    if max_val > 70:
-        return round(max_loc[0] / w, 4), round(max_loc[1] / h, 4), True, 4.0
 
     return 0.5, 0.5, False, 0.0
 

@@ -443,7 +443,7 @@
         <!-- VISTA 2: CONTROL DEL ÁREA SEGURA -->
         <div id="viewControl">
             <div class="metrics-row">
-                <div class="metric-box"><span>Posicion</span><b id="ctrlXY">50%, 50%</b></div>
+                <div class="metric-box"><span>Coord (-5 a 5)</span><b id="ctrlXY">0.0, 0.0</b></div>
                 <div class="metric-box"><span>Cabeceo</span><b id="ctrlC">--°</b></div>
                 <div class="metric-box"><span>Rotacion</span><b id="ctrlR">--°</b></div>
             </div>
@@ -451,10 +451,10 @@
             <div class="touchpad-wrapper" id="safePad">
                 <div class="grid-lines"></div>
                 <div class="crosshair-center"></div>
-                <span class="corner-tag tag-tl" id="padTL">TL</span>
-                <span class="corner-tag tag-tr" id="padTR">TR</span>
-                <span class="corner-tag tag-bl" id="padBL">BL</span>
-                <span class="corner-tag tag-br" id="padBR">BR</span>
+                <span class="corner-tag tag-tl" id="padTL">(-5, 5)</span>
+                <span class="corner-tag tag-tr" id="padTR">(5, 5)</span>
+                <span class="corner-tag tag-bl" id="padBL">(-5, -5)</span>
+                <span class="corner-tag tag-br" id="padBR">(5, -5)</span>
                 <div id="laserCursor"></div>
             </div>
 
@@ -478,6 +478,7 @@
         let esquinas = [];
         let areaMode = 'full'; // 'full' = 4 esquinas de la camara, 'manual' = 2 esquinas tocadas
         let calibratedPolygon = null;
+        let registeredCornerAnims = []; // Animaciones de esquinas registradas (-5,5) etc.
         let laserPos = { x: 0.5, y: 0.5, detected: false };
         let cabeceoActual = 115;
         let rotacionActual = 124;
@@ -619,6 +620,7 @@
         function limpiarEsquinas() {
             esquinas = [];
             calibratedPolygon = null;
+            registeredCornerAnims = [];
             detectedObject = null;
             document.getElementById('identifyCard').style.display = 'none';
             actualizarUIEsquinas();
@@ -725,6 +727,52 @@
                 ctx.stroke();
             });
 
+            // Animacion de flecha / palomita y coordenada cartesiana en esquinas registradas
+            const nowMs = Date.now();
+            registeredCornerAnims.forEach(anim => {
+                const ax = anim.x * canvas.width;
+                const ay = anim.y * canvas.height;
+                const elapsed = Math.min(1.0, (nowMs - anim.startTime) / 700.0);
+                const pulseRadius = 12 + elapsed * 18;
+                const alpha = 1.0 - elapsed * 0.7;
+
+                // Anillo expansivo verde Apple
+                ctx.beginPath();
+                ctx.arc(ax, ay, pulseRadius, 0, 2 * Math.PI);
+                ctx.strokeStyle = `rgba(52, 199, 89, ${alpha})`;
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                // Circulo solido + palomita de confirmacion
+                ctx.beginPath();
+                ctx.arc(ax, ay, 11, 0, 2 * Math.PI);
+                ctx.fillStyle = "#34C759";
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Palomita blanca (checkmark)
+                ctx.beginPath();
+                ctx.moveTo(ax - 5, ay);
+                ctx.lineTo(ax - 1, ay + 4);
+                ctx.lineTo(ax + 5, ay - 4);
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2.2;
+                ctx.lineCap = "round";
+                ctx.stroke();
+
+                // Etiqueta (-5, 5)
+                ctx.font = "700 11px -apple-system, sans-serif";
+                const lblW = ctx.measureText(anim.label).width + 10;
+                const lxPos = Math.min(canvas.width - lblW - 4, Math.max(4, ax - lblW / 2));
+                const lyPos = ay < 30 ? ay + 16 : ay - 28;
+                ctx.fillStyle = "rgba(29, 29, 31, 0.85)";
+                ctx.fillRect(lxPos, lyPos, lblW, 18);
+                ctx.fillStyle = "#fff";
+                ctx.fillText(anim.label, lxPos + 5, lyPos + 13);
+            });
+
             if (laserPos.detected) {
                 const lx = laserPos.x * canvas.width;
                 const ly = laserPos.y * canvas.height;
@@ -806,6 +854,7 @@
 
             calibrando = true;
             calibratedPolygon = null;
+            registeredCornerAnims = [];
             jacobianMatrix = null;
             localStorage.removeItem('trak_jacobian');
 
@@ -883,10 +932,10 @@
             const jActive = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
 
             const targets = [
-                { key: "TL", name: "Superior Izquierda", pt: rectArea.TL },
-                { key: "TR", name: "Superior Derecha", pt: rectArea.TR },
-                { key: "BR", name: "Inferior Derecha", pt: rectArea.BR },
-                { key: "BL", name: "Inferior Izquierda", pt: rectArea.BL }
+                { key: "TL", name: "Superior Izquierda (-5, 5)", coordLabel: "(-5, 5)", pt: rectArea.TL },
+                { key: "TR", name: "Superior Derecha (5, 5)", coordLabel: "(5, 5)", pt: rectArea.TR },
+                { key: "BR", name: "Inferior Derecha (5, -5)", coordLabel: "(5, -5)", pt: rectArea.BR },
+                { key: "BL", name: "Inferior Izquierda (-5, -5)", coordLabel: "(-5, -5)", pt: rectArea.BL }
             ];
             const cal = {};
             const camCorners = [];
@@ -973,6 +1022,14 @@
                 cal[`c${t.key}`] = cabeceoActual;
                 cal[`r${t.key}`] = rotacionActual;
                 camCorners.push([lastLx, lastLy]);
+
+                // Disparar animacion de flecha / palomita de esquina registrada
+                registeredCornerAnims.push({
+                    x: lastLx,
+                    y: lastLy,
+                    label: t.coordLabel,
+                    startTime: Date.now()
+                });
             }
 
             calibratedPolygon = camCorners;
@@ -1261,12 +1318,18 @@
         let draggingPad = false;
         let lastPadSend = 0;
 
+        function uvACartesiano(u, v) {
+            const x = ((u - 0.5) * 10.0).toFixed(1);
+            const y = ((0.5 - v) * 10.0).toFixed(1);
+            return `${x}, ${y}`;
+        }
+
         function enviarCoordenadaPad(u, v, force = false) {
             u = Math.max(0, Math.min(1, u));
             v = Math.max(0, Math.min(1, v));
             cursor.style.left = (u * 100) + '%';
             cursor.style.top = (v * 100) + '%';
-            document.getElementById('ctrlXY').innerText = `${Math.round(u*100)}%, ${Math.round(v*100)}%`;
+            document.getElementById('ctrlXY').innerText = uvACartesiano(u, v);
 
             const now = Date.now();
             if (!force && now - lastPadSend < 65) return;
@@ -1293,7 +1356,7 @@
         async function centrarAreaSegura() {
             cursor.style.left = '50%';
             cursor.style.top = '50%';
-            document.getElementById('ctrlXY').innerText = '50%, 50%';
+            document.getElementById('ctrlXY').innerText = '0.0, 0.0';
             const res = await fetch('/api/esp32/center', { method: 'POST' });
             const d = await res.json();
             actualizarEstadoCtrl(d);
