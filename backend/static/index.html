@@ -408,31 +408,40 @@
                 </div>
             </div>
 
-            <div class="filter-bar">
-                <button class="filter-pill" onclick="buscarColorLocal('Todas')">Detectar Todo</button>
-                <button class="filter-pill" onclick="buscarColorLocal('Blanco')">Blancas</button>
-                <button class="filter-pill" onclick="buscarColorLocal('Verde pastel')">Verde Pastel</button>
-                <button class="filter-pill" onclick="buscarColorLocal('Amarillo')">Amarillas</button>
-                <button class="filter-pill" onclick="buscarColorLocal('Azul')">Azules</button>
-                <button class="filter-pill" onclick="buscarColorLocal('Rojo')">Rojas</button>
-            </div>
+            <div id="visionToolsBlock" style="display:flex; flex-direction:column; gap:10px;">
+                <div class="filter-bar">
+                    <button class="filter-pill" onclick="buscarColorLocal('Todas')">Detectar Todo</button>
+                    <button class="filter-pill" onclick="buscarColorLocal('Blanco')">Blancas</button>
+                    <button class="filter-pill" onclick="buscarColorLocal('Verde pastel')">Verde Pastel</button>
+                    <button class="filter-pill" onclick="buscarColorLocal('Amarillo')">Amarillas</button>
+                    <button class="filter-pill" onclick="buscarColorLocal('Azul')">Azules</button>
+                    <button class="filter-pill" onclick="buscarColorLocal('Rojo')">Rojas</button>
+                </div>
 
-            <div class="cmd-row">
-                <input type="text" id="cmdInput" class="cmd-input" placeholder="Ej: señala verde pastel...">
-                <button class="btn" onclick="iniciarVoz()" id="btnVoz">Voz</button>
-                <button class="btn btn-blue" onclick="enviarComando()">Ir</button>
+                <div class="cmd-row">
+                    <input type="text" id="cmdInput" class="cmd-input" placeholder="Ej: señala verde pastel...">
+                    <button class="btn" onclick="iniciarVoz()" id="btnVoz">Voz</button>
+                    <button class="btn btn-blue" onclick="enviarComando()">Ir</button>
+                </div>
             </div>
 
             <div class="card" id="cornerConfirmCard" style="display:none; border-color: rgba(52, 199, 89, 0.4);">
-                <div class="id-header" style="margin-bottom: 10px;">
+                <div class="id-header" style="margin-bottom: 8px;">
                     <span class="id-title" style="color: var(--green);" id="confirmCornerTitle">Confirmar Esquina (-5, 5)</span>
                     <span class="id-model" id="confirmAnglesText">--° / --°</span>
                 </div>
-                <div class="action-grid" style="grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;">
-                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(2, 0)">Arriba</button>
-                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(-2, 0)">Abajo</button>
-                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(0, -2)">Izq</button>
-                    <button class="btn" style="padding: 9px 4px; font-size: 0.76rem;" onclick="ajusteFinoEsquina(0, 2)">Der</button>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px;">
+                    <div id="miniJoyBase" style="position:relative; width:100px; height:100px; flex-shrink:0; border-radius:50%; background:var(--surface-secondary); border:1px solid var(--border); touch-action:none;">
+                        <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(0,0,0,0.08);"></div>
+                        <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(0,0,0,0.08);"></div>
+                        <div id="miniJoyThumb" style="position:absolute; left:50%; top:50%; width:36px; height:36px; border-radius:50%; background:var(--green); box-shadow:0 2px 8px rgba(52,199,89,0.4); transform:translate(-50%,-50%); pointer-events:none;"></div>
+                    </div>
+                    <div class="action-grid" style="flex:1; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(1, 0)">Arriba 1°</button>
+                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(-1, 0)">Abajo 1°</button>
+                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(0, -1)">Izq 1°</button>
+                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(0, 1)">Der 1°</button>
+                    </div>
                 </div>
                 <div class="action-grid" style="grid-template-columns: 1.4fr 1fr 0.7fr; gap: 8px;">
                     <button class="btn btn-green" id="btnConfirmCorner">Confirmar</button>
@@ -640,8 +649,14 @@
             document.getElementById('modeFullBtn').classList.toggle('active', mode === 'full');
             document.getElementById('modeManualBtn').classList.toggle('active', mode === 'manual');
             document.getElementById('modeJoystickBtn').classList.toggle('active', mode === 'joystick');
-            document.getElementById('joystickCard').style.display = mode === 'joystick' ? 'block' : 'none';
-            if (mode === 'joystick') reiniciarJoystick();
+
+            const isJoy = mode === 'joystick';
+            document.getElementById('joystickCard').style.display = isJoy ? 'block' : 'none';
+            document.getElementById('visionToolsBlock').style.display = isJoy ? 'none' : 'flex';
+            document.getElementById('btnIdentify').style.display = isJoy ? 'none' : 'block';
+            document.getElementById('btnAutoCalibrar').style.display = isJoy ? 'none' : 'block';
+
+            if (isJoy) reiniciarJoystick();
             actualizarUIEsquinas();
         }
 
@@ -677,11 +692,11 @@
         function obtenerRectanguloObjetivo() {
             if (areaMode === 'full') {
                 return {
-                    TL: { x: 0.08, y: 0.08 },
-                    TR: { x: 0.92, y: 0.08 },
-                    BR: { x: 0.92, y: 0.92 },
-                    BL: { x: 0.08, y: 0.92 },
-                    center: { x: 0.5, y: 0.5 }
+                    TL: { x: 0.12, y: 0.10 },
+                    TR: { x: 0.88, y: 0.10 },
+                    BR: { x: 0.88, y: 0.82 },
+                    BL: { x: 0.12, y: 0.82 },
+                    center: { x: 0.5, y: 0.46 }
                 };
             }
             if (esquinas.length < 2) return null;
@@ -1553,10 +1568,13 @@
             document.getElementById('instructionText').innerText = `Mueve el joystick hacia ${c.label} y pulsa Capturar.`;
         }
 
-        function initJoystick() {
-            const base = document.getElementById('joyBase');
-            const thumb = document.getElementById('joyThumb');
+        function bindUltraLowJoystick(baseId, thumbId, thumbHalf) {
+            const base = document.getElementById(baseId);
+            const thumb = document.getElementById(thumbId);
+            if (!base || !thumb) return;
             let active = false;
+            let localTimer = null;
+            let jx = 0, jy = 0;
 
             function updateStick(e) {
                 const rect = base.getBoundingClientRect();
@@ -1567,7 +1585,7 @@
 
                 let dx = clientX - cx;
                 let dy = clientY - cy;
-                const maxR = rect.width / 2 - 27;
+                const maxR = Math.max(10, rect.width / 2 - thumbHalf);
                 const dist = Math.hypot(dx, dy);
                 if (dist > maxR) {
                     dx = (dx / dist) * maxR;
@@ -1575,35 +1593,43 @@
                 }
                 thumb.style.left = (50 + (dx / rect.width) * 100) + '%';
                 thumb.style.top = (50 + (dy / rect.height) * 100) + '%';
-                joyDx = dx / maxR; // -1..1 (izq/der -> rotacion)
-                joyDy = dy / maxR; // -1..1 (arriba/abajo -> cabeceo)
+                jx = dx / maxR;
+                jy = dy / maxR;
             }
 
             function stopStick() {
                 active = false;
-                joyDx = 0; joyDy = 0;
+                jx = 0; jy = 0;
                 thumb.style.left = '50%';
                 thumb.style.top = '50%';
-                if (joyTimer) { clearInterval(joyTimer); joyTimer = null; }
+                if (localTimer) { clearInterval(localTimer); localTimer = null; }
             }
 
             base.addEventListener('pointerdown', (e) => {
                 active = true;
                 updateStick(e);
-                if (!joyTimer) {
-                    joyTimer = setInterval(async () => {
-                        if (!active || (Math.abs(joyDx) < 0.12 && Math.abs(joyDy) < 0.12)) return;
-                        const dRot = Math.round(joyDx * 3);
-                        const dCab = Math.round(-joyDy * 3);
+                if (!localTimer) {
+                    // Sensibilidad muy baja: exactamente 1 grado cada 190ms
+                    localTimer = setInterval(async () => {
+                        if (!active) return;
+                        const dRot = Math.abs(jx) > 0.25 ? (jx > 0 ? 1 : -1) : 0;
+                        const dCab = Math.abs(jy) > 0.25 ? (jy < 0 ? 1 : -1) : 0;
                         if (dRot !== 0 || dCab !== 0) {
                             await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 10);
-                            document.getElementById('joyAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
+                            const angTxt = `${cabeceoActual}° / ${rotacionActual}°`;
+                            document.getElementById('joyAnglesText').innerText = angTxt;
+                            document.getElementById('confirmAnglesText').innerText = angTxt;
                         }
-                    }, 110);
+                    }, 190);
                 }
             });
             window.addEventListener('pointermove', (e) => { if (active) updateStick(e); });
             window.addEventListener('pointerup', stopStick);
+        }
+
+        function initJoystick() {
+            bindUltraLowJoystick('joyBase', 'joyThumb', 27);
+            bindUltraLowJoystick('miniJoyBase', 'miniJoyThumb', 18);
         }
 
         async function capturarEsquinaJoystick() {
