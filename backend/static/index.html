@@ -3,76 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TRAK - Visión y Área Segura</title>
+    <title>TRAK</title>
     <style>
         :root {
-            --bg: #070b14;
-            --card: #0f172a;
-            --border: rgba(255, 255, 255, 0.12);
-            --primary: #00d2ff;
-            --primary-glow: rgba(0, 210, 255, 0.4);
-            --laser: #ff0055;
-            --laser-glow: rgba(255, 0, 85, 0.6);
-            --safe: #10b981;
-            --safe-glow: rgba(16, 185, 129, 0.45);
-            --text: #f8fafc;
-            --text-dim: #94a3b8;
+            --bg: #F5F5F7;
+            --surface: #FFFFFF;
+            --surface-secondary: #F2F2F7;
+            --border: rgba(0, 0, 0, 0.08);
+            --text: #1D1D1F;
+            --text-secondary: #86868B;
+            --blue: #007AFF;
+            --green: #34C759;
+            --red: #FF3B30;
+            --indigo: #5856D6;
+            --orange: #FF9500;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
         body {
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow-x: hidden;
             user-select: none;
             -webkit-user-select: none;
         }
+
+        /* HEADER APPLE STYLE */
         header {
-            padding: 10px 16px;
+            padding: 12px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
             z-index: 30;
         }
-        .logo { font-size: 1.05rem; font-weight: 800; letter-spacing: 1px; color: var(--primary); text-shadow: 0 0 10px var(--primary-glow); }
-        .mode-tabs { display: flex; gap: 6px; }
-        .tab-btn {
-            font-size: 0.72rem;
+        .logo {
+            font-size: 1.15rem;
             font-weight: 700;
-            padding: 6px 11px;
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            background: rgba(255,255,255,0.06);
-            color: var(--text-dim);
-            cursor: pointer;
+            letter-spacing: -0.4px;
+            color: var(--text);
         }
-        .tab-btn.active {
-            background: var(--primary);
-            color: #05101d;
-            border-color: var(--primary);
-            box-shadow: 0 0 12px var(--primary-glow);
+        .segmented-control {
+            display: flex;
+            background: #E5E5EA;
+            padding: 3px;
+            border-radius: 10px;
+            gap: 2px;
+        }
+        .seg-btn {
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .seg-btn.active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
         }
 
-        /* MODO CÁMARA / CALIBRACIÓN */
-        #viewCalibrar { display: flex; flex-direction: column; flex: 1; }
-        .camera-wrapper {
+        main {
+            flex: 1;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 14px 16px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* VISTA CALIBRAR */
+        #viewCalibrar { display: flex; flex-direction: column; gap: 12px; }
+        .camera-card {
             position: relative;
             width: 100%;
-            height: 50vh;
+            height: 46vh;
             background: #000;
+            border-radius: 18px;
             overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
         }
-        video { width: 100%; height: 100%; object-fit: fill; }
+        video { width: 100%; height: 100%; object-fit: fill; display: block; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
 
-        .camera-overlay {
+        .camera-pills {
             position: absolute;
             top: 10px; left: 10px; right: 10px;
             display: flex;
@@ -81,83 +115,160 @@
             pointer-events: none;
         }
         .pill {
-            background: rgba(0,0,0,0.75);
-            backdrop-filter: blur(8px);
-            border: 1px solid var(--border);
-            padding: 5px 12px;
-            border-radius: 14px;
-            font-size: 0.75rem;
-            font-weight: 700;
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            color: var(--text);
+            padding: 5px 11px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
         }
         .pill.laser-detected {
+            background: var(--red);
             color: #fff;
-            background: rgba(255, 0, 85, 0.8);
-            border-color: #ff3377;
-            box-shadow: 0 0 16px var(--laser-glow);
         }
 
-        .camera-controls-floating {
+        .lens-bar {
             position: absolute;
-            bottom: 18px;
+            bottom: 12px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 8px;
-            background: rgba(0, 0, 0, 0.78);
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.88);
             backdrop-filter: blur(12px);
-            padding: 5px 10px;
-            border-radius: 24px;
-            border: 1px solid var(--border);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 4px;
+            border-radius: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
             z-index: 16;
         }
         .btn-zoom {
-            background: rgba(255, 255, 255, 0.1);
+            background: transparent;
             color: var(--text);
-            border: 1px solid transparent;
-            padding: 6px 11px;
+            border: none;
+            padding: 5px 12px;
             border-radius: 16px;
-            font-size: 0.75rem;
-            font-weight: 700;
+            font-size: 0.74rem;
+            font-weight: 600;
             cursor: pointer;
         }
         .btn-zoom.active {
-            background: var(--primary);
-            color: #05101d;
-            box-shadow: 0 0 12px var(--primary-glow);
+            background: var(--text);
+            color: #fff;
         }
 
-        /* MODO ÁREA SEGURA (CONTROL TÁCTIL) */
-        #viewControl {
-            display: none;
-            flex-direction: column;
-            flex: 1;
-            padding: 16px;
-            gap: 12px;
-            max-width: 480px;
-            width: 100%;
-            margin: 0 auto;
-        }
-        .status-strip {
-            background: rgba(255,255,255,0.04);
+        /* TARJETAS Y BOTONES APPLE */
+        .card {
+            background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 10px;
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+        .status-line {
             display: flex;
-            justify-content: space-around;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.84rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+        .step-badge {
+            background: var(--surface-secondary);
+            color: var(--blue);
+            font-weight: 700;
+            font-size: 0.72rem;
+            padding: 4px 10px;
+            border-radius: 8px;
+            white-space: nowrap;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .btn {
+            padding: 13px 12px;
+            border-radius: 13px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.86rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            transition: transform 0.12s ease, opacity 0.12s ease;
+        }
+        .btn:active { transform: scale(0.97); opacity: 0.85; }
+        .btn:disabled { opacity: 0.55; cursor: default; }
+        .btn-full { grid-column: span 2; }
+        .btn-blue { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .btn-indigo { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+        .btn-green { background: var(--green); color: #fff; border-color: var(--green); }
+        .btn-red { background: var(--surface); color: var(--red); border-color: rgba(255, 59, 48, 0.25); }
+        .btn-red.on { background: var(--red); color: #fff; border-color: var(--red); }
+
+        #identifyCard {
+            display: none;
+            background: var(--surface);
+            border: 1px solid rgba(88, 86, 214, 0.25);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+        .id-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .id-title { font-size: 0.96rem; font-weight: 700; color: var(--indigo); }
+        .id-model { font-size: 0.68rem; color: var(--text-secondary); font-weight: 600; }
+        .id-desc { font-size: 0.82rem; color: var(--text); line-height: 1.4; }
+        .other-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .obj-chip {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 11px;
+            border-radius: 16px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* VISTA ÁREA SEGURA */
+        #viewControl { display: none; flex-direction: column; gap: 12px; }
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
             text-align: center;
         }
-        .status-item span { display: block; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; }
-        .status-item b { font-size: 1rem; color: var(--primary); }
+        .metric-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px 6px;
+            box-shadow: var(--shadow);
+        }
+        .metric-box span { display: block; font-size: 0.66rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
+        .metric-box b { font-size: 1rem; color: var(--text); font-weight: 700; }
 
         .touchpad-wrapper {
             position: relative;
             width: 100%;
             aspect-ratio: 1 / 1;
-            max-height: 46vh;
-            background: radial-gradient(circle at center, rgba(16, 185, 129, 0.1), rgba(0, 0, 0, 0.6));
-            border: 2px solid var(--safe);
-            border-radius: 18px;
-            box-shadow: 0 0 25px rgba(16, 185, 129, 0.2), inset 0 0 25px rgba(16, 185, 129, 0.08);
+            max-height: 45vh;
+            background: var(--surface);
+            border: 2px solid var(--green);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
             overflow: hidden;
             touch-action: none;
             cursor: crosshair;
@@ -167,8 +278,8 @@
             position: absolute;
             inset: 0;
             background-image:
-                linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px);
+                linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
             background-size: 25% 25%;
             pointer-events: none;
         }
@@ -177,274 +288,138 @@
             left: 50%; top: 50%;
             width: 20px; height: 20px;
             transform: translate(-50%, -50%);
-            border: 1px dashed rgba(255,255,255,0.4);
+            border: 1px dashed rgba(0, 0, 0, 0.25);
             border-radius: 50%;
             pointer-events: none;
         }
         .corner-tag {
             position: absolute;
             font-size: 0.65rem;
-            font-weight: 700;
-            color: rgba(16, 185, 129, 0.9);
-            padding: 5px 7px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            padding: 6px 8px;
             pointer-events: none;
         }
-        .tag-tl { top: 2px; left: 4px; }
-        .tag-tr { top: 2px; right: 4px; }
-        .tag-bl { bottom: 2px; left: 4px; }
-        .tag-br { bottom: 2px; right: 4px; }
+        .tag-tl { top: 0; left: 0; }
+        .tag-tr { top: 0; right: 0; }
+        .tag-bl { bottom: 0; left: 0; }
+        .tag-br { bottom: 0; right: 0; }
 
         #laserCursor {
             position: absolute;
-            width: 26px; height: 26px;
+            width: 24px; height: 24px;
             border-radius: 50%;
-            background: radial-gradient(circle, #ffffff 18%, #ff0055 48%, rgba(255,0,85,0) 75%);
-            box-shadow: 0 0 18px #ff0055;
+            background: var(--red);
+            border: 3px solid #fff;
+            box-shadow: 0 2px 10px rgba(255, 59, 48, 0.55);
             transform: translate(-50%, -50%);
             left: 50%; top: 50%;
             pointer-events: none;
             transition: left 0.04s linear, top 0.04s linear;
         }
 
-        .controls-panel {
-            flex: 1;
-            background: var(--card);
-            border-top: 1px solid var(--border);
-            border-radius: 22px 22px 0 0;
-            margin-top: -12px;
-            z-index: 20;
-            padding: 14px 16px 24px;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .instruction-box {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 10px 12px;
-            font-size: 0.8rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .badge-step {
-            background: var(--primary);
-            color: #05101d;
-            font-weight: 800;
-            border-radius: 8px;
-            padding: 3px 8px;
-            font-size: 0.72rem;
-            white-space: nowrap;
-        }
-        .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-        button.action-btn {
-            padding: 13px 10px;
-            border-radius: 13px;
-            border: 1px solid var(--border);
-            background: rgba(255,255,255,0.06);
-            color: var(--text);
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        button.action-btn:active { transform: scale(0.97); }
-        .btn-primary {
-            background: var(--primary) !important;
-            color: #05101d !important;
-            border-color: var(--primary) !important;
-            box-shadow: 0 0 15px var(--primary-glow);
-            font-weight: 700 !important;
-        }
-        .btn-safe {
-            grid-column: span 2;
-            background: rgba(16, 185, 129, 0.16) !important;
-            border-color: rgba(16, 185, 129, 0.45) !important;
-            color: #34d399 !important;
-        }
-        .btn-laser {
-            background: rgba(255, 0, 85, 0.15) !important;
-            border-color: rgba(255, 0, 85, 0.4) !important;
-            color: #ff3377 !important;
-        }
-        .btn-laser.on {
-            background: var(--laser) !important;
-            color: white !important;
-            box-shadow: 0 0 20px var(--laser-glow);
-        }
-        .btn-gemini {
-            grid-column: span 2;
-            background: linear-gradient(135deg, #1e1b4b, #312e81) !important;
-            border-color: #6366f1 !important;
-            color: #e0e7ff !important;
-            font-weight: 700 !important;
-        }
-        .btn-identify {
-            grid-column: span 2;
-            background: linear-gradient(135deg, #7c2d12, #ea580c) !important;
-            border-color: #fb923c !important;
-            color: #fff7ed !important;
-            font-weight: 800 !important;
-            box-shadow: 0 0 18px rgba(234, 88, 12, 0.35);
-        }
-        #identifyCard {
-            display: none;
-            background: rgba(234, 88, 12, 0.12);
-            border: 1px solid rgba(251, 146, 60, 0.45);
-            border-radius: 12px;
-            padding: 10px 12px;
-            font-size: 0.8rem;
-        }
-        #identifyCard h4 { color: #fb923c; font-size: 0.88rem; margin-bottom: 4px; }
-        #identifyCard p { color: #e2e8f0; line-height: 1.35; }
-        .other-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-        .obj-chip {
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(251, 146, 60, 0.4);
-            color: #fed7aa;
-            padding: 4px 9px;
-            border-radius: 12px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            cursor: pointer;
-        }
         .esp-link {
             text-align: center;
-            font-size: 0.72rem;
-            color: var(--text-dim);
-            margin-top: 2px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
         }
-        .esp-link a { color: var(--primary); text-decoration: none; font-weight: 700; }
-
-        #geminiModal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.85);
-            backdrop-filter: blur(10px);
-            z-index: 100;
-            padding: 24px;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-card {
-            background: #131b2e;
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 20px;
-            max-width: 480px;
-            width: 100%;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        .modal-card h3 { color: #818cf8; margin-bottom: 12px; font-size: 1.05rem; }
-        .modal-card p { font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; white-space: pre-wrap; }
-        .modal-close { margin-top: 16px; width: 100%; }
+        .esp-link a { color: var(--blue); text-decoration: none; font-weight: 600; }
     </style>
 </head>
 <body>
     <header>
-        <div class="logo">⚡ TRAK</div>
-        <div class="mode-tabs">
-            <button class="tab-btn active" id="tabCalibrar" onclick="cambiarVista('calibrar')">📷 Calibrar</button>
-            <button class="tab-btn" id="tabControl" onclick="cambiarVista('control')">🟩 Área Segura</button>
+        <div class="logo">TRAK</div>
+        <div class="segmented-control">
+            <button class="seg-btn active" id="tabCalibrar" onclick="cambiarVista('calibrar')">Calibrar</button>
+            <button class="seg-btn" id="tabControl" onclick="cambiarVista('control')">Area Segura</button>
         </div>
     </header>
 
-    <!-- VISTA 1: CALIBRACIÓN VISUAL (2 ESQUINAS) -->
-    <div id="viewCalibrar">
-        <div class="camera-wrapper">
-            <video id="video" autoplay playsinline muted></video>
-            <canvas id="overlayCanvas"></canvas>
+    <main>
+        <!-- VISTA 1: CALIBRACIÓN E IDENTIFICACIÓN -->
+        <div id="viewCalibrar">
+            <div class="camera-card">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas id="overlayCanvas"></canvas>
 
-            <div class="camera-overlay">
-                <div class="pill" id="laserStatusPill">Buscando Láser...</div>
-                <div class="pill" id="cornerCountPill">Esquinas: 0 / 2</div>
+                <div class="camera-pills">
+                    <div class="pill" id="laserStatusPill">Buscando laser</div>
+                    <div class="pill" id="cornerCountPill">Esquinas: 0 / 2</div>
+                </div>
+
+                <div class="lens-bar">
+                    <button class="btn-zoom" id="btnZoom05" onclick="setZoomMode(0.5)">0.5x</button>
+                    <button class="btn-zoom active" id="btnZoom1" onclick="setZoomMode(1.0)">1x</button>
+                    <button class="btn-zoom" onclick="siguienteCamara()">Lente</button>
+                </div>
             </div>
 
-            <div class="camera-controls-floating">
-                <button class="btn-zoom" id="btnZoom05" onclick="setZoomMode(0.5)">0.5x Gran Angular</button>
-                <button class="btn-zoom active" id="btnZoom1" onclick="setZoomMode(1.0)">1x Normal</button>
-                <button class="btn-zoom" onclick="siguienteCamara()">🔄 Lente</button>
-            </div>
-        </div>
-
-        <div class="controls-panel">
-            <div class="instruction-box">
-                <span class="badge-step" id="stepBadge">Paso 1</span>
-                <span id="instructionText">Toca solo 2 esquinas opuestas para definir el Área Segura.</span>
+            <div class="card">
+                <div class="status-line">
+                    <span class="step-badge" id="stepBadge">Paso 1</span>
+                    <span id="instructionText">Toca 2 esquinas opuestas para marcar el Area Segura.</span>
+                </div>
             </div>
 
             <div class="action-grid">
-                <button class="action-btn btn-identify" id="btnIdentify" onclick="identificarYSenalar()">🔍 Identificar y Señalar con Láser</button>
-                <button class="action-btn btn-laser on" id="btnLaserToggle" onclick="toggleLaser()">⚡ Láser ON/OFF</button>
-                <button class="action-btn" onclick="limpiarEsquinas()">🗑️ Borrar Esquinas</button>
-                <button class="action-btn btn-primary" id="btnAutoCalibrar" onclick="autoCalibrar()">🎯 Auto-Calibrar</button>
-                <button class="action-btn" onclick="centrarAreaSegura()">🎯 Centro</button>
-                <button class="action-btn btn-gemini" onclick="analizarConGemini()">🧠 Análisis Completo Gemini 3.8 IA</button>
+                <button class="btn btn-indigo btn-full" id="btnIdentify" onclick="identificarYSenalar()">Identificar y Señalar con Laser</button>
+                <button class="btn btn-blue" id="btnAutoCalibrar" onclick="autoCalibrar()">Auto-Calibrar</button>
+                <button class="btn" onclick="centrarAreaSegura()">Centro</button>
+                <button class="btn btn-red on" id="btnLaserToggle" onclick="toggleLaser()">Laser: ON</button>
+                <button class="btn" onclick="limpiarEsquinas()">Reiniciar</button>
             </div>
 
             <div id="identifyCard">
-                <h4 id="identifyTitle">🔍 Objeto Detectado</h4>
-                <p id="identifyDesc"></p>
+                <div class="id-header">
+                    <span class="id-title" id="identifyTitle">Objeto Detectado</span>
+                    <span class="id-model" id="identifyModel"></span>
+                </div>
+                <p class="id-desc" id="identifyDesc"></p>
                 <div class="other-chips" id="otherChips"></div>
             </div>
         </div>
-    </div>
 
-    <!-- VISTA 2: CONTROL DEL ÁREA SEGURA (CUADRADO INTERACTIVO + BOTÓN CENTRO) -->
-    <div id="viewControl">
-        <div class="status-strip">
-            <div class="status-item"><span>Posición</span><b id="ctrlXY">50%, 50%</b></div>
-            <div class="status-item"><span>Cabeceo</span><b id="ctrlC">--°</b></div>
-            <div class="status-item"><span>Rotación</span><b id="ctrlR">--°</b></div>
-        </div>
+        <!-- VISTA 2: CONTROL DEL ÁREA SEGURA -->
+        <div id="viewControl">
+            <div class="metrics-row">
+                <div class="metric-box"><span>Posicion</span><b id="ctrlXY">50%, 50%</b></div>
+                <div class="metric-box"><span>Cabeceo</span><b id="ctrlC">--°</b></div>
+                <div class="metric-box"><span>Rotacion</span><b id="ctrlR">--°</b></div>
+            </div>
 
-        <div class="touchpad-wrapper" id="safePad">
-            <div class="grid-lines"></div>
-            <div class="crosshair-center"></div>
-            <span class="corner-tag tag-tl" id="padTL">TL</span>
-            <span class="corner-tag tag-tr" id="padTR">TR</span>
-            <span class="corner-tag tag-bl" id="padBL">BL</span>
-            <span class="corner-tag tag-br" id="padBR">BR</span>
-            <div id="laserCursor"></div>
-        </div>
+            <div class="touchpad-wrapper" id="safePad">
+                <div class="grid-lines"></div>
+                <div class="crosshair-center"></div>
+                <span class="corner-tag tag-tl" id="padTL">TL</span>
+                <span class="corner-tag tag-tr" id="padTR">TR</span>
+                <span class="corner-tag tag-bl" id="padBL">BL</span>
+                <span class="corner-tag tag-br" id="padBR">BR</span>
+                <div id="laserCursor"></div>
+            </div>
 
-        <div class="action-grid">
-            <button class="action-btn btn-primary" onclick="centrarAreaSegura()">🎯 Centro Área Segura</button>
-            <button class="action-btn btn-laser on" id="btnLaserCtrl" onclick="toggleLaser()">⚡ Láser ON/OFF</button>
-            <button class="action-btn btn-safe" onclick="togglePatrulla()">📐 Patrullar Perímetro del Área Segura</button>
-        </div>
+            <div class="action-grid">
+                <button class="btn btn-blue" onclick="centrarAreaSegura()">Centro</button>
+                <button class="btn btn-red on" id="btnLaserCtrl" onclick="toggleLaser()">Laser: ON</button>
+                <button class="btn btn-green btn-full" id="btnPatrulla" onclick="togglePatrulla()">Patrullar Perimetro</button>
+            </div>
 
-        <div class="esp-link">
-            Web Local ESP32 directa: <a href="http://192.168.68.107" target="_blank">http://192.168.68.107</a>
+            <div class="esp-link">
+                Web local del dispositivo: <a href="http://192.168.68.107" target="_blank">192.168.68.107</a>
+            </div>
         </div>
-    </div>
-
-    <div id="geminiModal">
-        <div class="modal-card">
-            <h3 id="geminiModalTitle">🧠 Análisis Visual Gemini 3.8 Flash</h3>
-            <p id="geminiText">Analizando escena...</p>
-            <button class="action-btn modal-close" onclick="cerrarModal()">Cerrar</button>
-        </div>
-    </div>
+    </main>
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('overlayCanvas');
         const ctx = canvas.getContext('2d');
 
-        let esquinas = []; // Solo 2 esquinas opuestas
-        let laserPos = { x: 0.5, y: 0.5, detected: false, radius: 0 };
+        let esquinas = [];
+        let laserPos = { x: 0.5, y: 0.5, detected: false };
         let cabeceoActual = 115;
         let rotacionActual = 124;
         let calibrando = false;
-        let detectedObject = null; // { objeto, target_x, target_y, box }
+        let detectedObject = null;
         let jacobianMatrix = JSON.parse(localStorage.getItem('trak_jacobian') || 'null');
 
         let videoDevices = [];
@@ -481,7 +456,7 @@
                     setInterval(detectarLaserFrame, 150);
                 };
             } catch (err) {
-                console.error("Error cámara:", err);
+                console.error("Error camara:", err);
             }
         }
 
@@ -537,12 +512,9 @@
         }
         window.addEventListener('resize', ajustarCanvas);
 
-        // SOLO 2 ESQUINAS PARA DEFINIR EL ÁREA SEGURA
         canvas.addEventListener('click', (e) => {
             if (calibrando) return;
-            if (esquinas.length >= 2) {
-                esquinas = []; // Reiniciar si ya había 2
-            }
+            if (esquinas.length >= 2) esquinas = [];
             const rect = canvas.getBoundingClientRect();
             esquinas.push({
                 x: (e.clientX - rect.left) / rect.width,
@@ -555,18 +527,20 @@
             document.getElementById('cornerCountPill').innerText = `Esquinas: ${esquinas.length} / 2`;
             if (esquinas.length === 0) {
                 document.getElementById('stepBadge').innerText = "Paso 1";
-                document.getElementById('instructionText').innerText = "Toca la 1ra esquina (ej. Superior Izquierda) del Área Segura.";
+                document.getElementById('instructionText').innerText = "Toca 2 esquinas opuestas para marcar el Area Segura.";
             } else if (esquinas.length === 1) {
                 document.getElementById('stepBadge').innerText = "Paso 2";
-                document.getElementById('instructionText').innerText = "Ahora toca la esquina opuesta (ej. Inferior Derecha).";
+                document.getElementById('instructionText').innerText = "Toca la esquina opuesta para cerrar el rectangulo.";
             } else {
                 document.getElementById('stepBadge').innerText = "Listo";
-                document.getElementById('instructionText').innerText = "¡Área Segura marcada! Pulsa 'Auto-Calibrar'.";
+                document.getElementById('instructionText').innerText = "Area marcada. Pulsa Auto-Calibrar para alinear.";
             }
         }
 
         function limpiarEsquinas() {
             esquinas = [];
+            detectedObject = null;
+            document.getElementById('identifyCard').style.display = 'none';
             actualizarUIEsquinas();
         }
 
@@ -577,10 +551,10 @@
             const yMin = Math.min(esquinas[0].y, esquinas[1].y);
             const yMax = Math.max(esquinas[0].y, esquinas[1].y);
             return {
-                TL: { x: xMin, y: yMin, label: "TL" },
-                TR: { x: xMax, y: yMin, label: "TR" },
-                BR: { x: xMax, y: yMax, label: "BR" },
-                BL: { x: xMin, y: yMax, label: "BL" },
+                TL: { x: xMin, y: yMin },
+                TR: { x: xMax, y: yMin },
+                BR: { x: xMax, y: yMax },
+                BL: { x: xMin, y: yMax },
                 center: { x: (xMin + xMax) / 2, y: (yMin + yMax) / 2 }
             };
         }
@@ -591,7 +565,7 @@
             snap.height = Math.round(width * (canvas.clientHeight / canvas.clientWidth));
             const sCtx = snap.getContext('2d');
             sCtx.drawImage(video, 0, 0, snap.width, snap.height);
-            return snap.toDataURL('image/jpeg', 0.75);
+            return snap.toDataURL('image/jpeg', 0.78);
         }
 
         async function detectarLaserFrame() {
@@ -608,10 +582,10 @@
                 if (data.detected) {
                     laserPos.x = data.x;
                     laserPos.y = data.y;
-                    p.innerText = `🎯 LÁSER: (${Math.round(data.x*100)}%, ${Math.round(data.y*100)}%)`;
+                    p.innerText = `Laser: ${Math.round(data.x*100)}%, ${Math.round(data.y*100)}%`;
                     p.classList.add('laser-detected');
                 } else {
-                    p.innerText = 'Buscando Láser...';
+                    p.innerText = 'Buscando laser';
                     p.classList.remove('laser-detected');
                 }
             } catch (err) {}
@@ -627,46 +601,38 @@
                 const w = (rectArea.TR.x - rectArea.TL.x) * canvas.width;
                 const h = (rectArea.BL.y - rectArea.TL.y) * canvas.height;
 
-                ctx.fillStyle = "rgba(16, 185, 129, 0.16)";
+                ctx.fillStyle = "rgba(52, 199, 89, 0.18)";
                 ctx.fillRect(x1, y1, w, h);
-                ctx.strokeStyle = "rgba(16, 185, 129, 0.95)";
+                ctx.strokeStyle = "#34C759";
                 ctx.lineWidth = 2.5;
                 ctx.strokeRect(x1, y1, w, h);
-
-                // Centro del área segura
-                const cx = rectArea.center.x * canvas.width;
-                const cy = rectArea.center.y * canvas.height;
-                ctx.beginPath();
-                ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = "#00d2ff";
-                ctx.fill();
             }
 
             esquinas.forEach((pt, idx) => {
                 const px = pt.x * canvas.width;
                 const py = pt.y * canvas.height;
                 ctx.beginPath();
-                ctx.arc(px, py, 9, 0, 2 * Math.PI);
-                ctx.fillStyle = "#10b981";
+                ctx.arc(px, py, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = "#34C759";
                 ctx.fill();
-                ctx.fillStyle = "#fff";
-                ctx.font = "bold 12px sans-serif";
-                ctx.fillText(`E${idx + 1}`, px + 11, py - 6);
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2;
+                ctx.stroke();
             });
 
             if (laserPos.detected) {
                 const lx = laserPos.x * canvas.width;
                 const ly = laserPos.y * canvas.height;
                 ctx.beginPath();
-                ctx.arc(lx, ly, 16, 0, 2 * Math.PI);
-                ctx.strokeStyle = "#ff0055";
+                ctx.arc(lx, ly, 15, 0, 2 * Math.PI);
+                ctx.strokeStyle = "#FF3B30";
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
                 ctx.beginPath();
-                ctx.moveTo(lx - 9, ly); ctx.lineTo(lx + 9, ly);
-                ctx.moveTo(lx, ly - 9); ctx.lineTo(lx, ly + 9);
-                ctx.strokeStyle = "#ffffff";
+                ctx.moveTo(lx - 8, ly); ctx.lineTo(lx + 8, ly);
+                ctx.moveTo(lx, ly - 8); ctx.lineTo(lx, ly + 8);
+                ctx.strokeStyle = "#fff";
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
             }
@@ -678,25 +644,25 @@
                 const bw = (xmax - xmin) * canvas.width;
                 const bh = (ymax - ymin) * canvas.height;
 
-                ctx.strokeStyle = "#fb923c";
+                ctx.strokeStyle = "#5856D6";
                 ctx.lineWidth = 2.5;
-                ctx.setLineDash([6, 4]);
                 ctx.strokeRect(bx, by, bw, bh);
-                ctx.setLineDash([]);
 
                 const tx = detectedObject.target_x * canvas.width;
                 const ty = detectedObject.target_y * canvas.height;
                 ctx.beginPath();
-                ctx.arc(tx, ty, 7, 0, 2 * Math.PI);
-                ctx.fillStyle = "rgba(251, 146, 60, 0.9)";
+                ctx.arc(tx, ty, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = "#5856D6";
                 ctx.fill();
 
-                ctx.fillStyle = "#ea580c";
-                ctx.fillRect(bx, Math.max(0, by - 22), Math.min(220, ctx.measureText(detectedObject.objeto).width + 18), 22);
+                ctx.font = "600 12px -apple-system, sans-serif";
+                const textW = ctx.measureText(detectedObject.objeto).width + 16;
+                ctx.fillStyle = "#5856D6";
+                ctx.fillRect(bx, Math.max(0, by - 24), Math.min(240, textW), 24);
                 ctx.fillStyle = "#fff";
-                ctx.font = "bold 12px sans-serif";
-                ctx.fillText(detectedObject.objeto, bx + 6, Math.max(15, by - 6));
+                ctx.fillText(detectedObject.objeto, bx + 8, Math.max(16, by - 8));
             }
+
             requestAnimationFrame(renderLoop);
         }
 
@@ -720,49 +686,41 @@
             await new Promise(r => setTimeout(r, 380));
         }
 
-        // AUTO-CALIBRACIÓN INTELIGENTE CON DESCUBRIMIENTO DE EJES (JACOBIANO)
         async function autoCalibrar() {
             const rectArea = obtenerRectanguloDe2Esquinas();
             if (!rectArea) {
-                alert("Primero toca 2 esquinas opuestas en la cámara para definir el Área Segura.");
+                alert("Toca 2 esquinas opuestas en la camara primero.");
                 return;
             }
 
             calibrando = true;
             document.getElementById('stepBadge').innerText = "Fase 1";
-            document.getElementById('instructionText').innerText = "Mapeando dirección y sensibilidad de ejes...";
+            document.getElementById('instructionText').innerText = "Mapeando sensibilidad de ejes...";
 
-            // 1. Posición base
             await moverServos(110, 120);
             const p0 = await medirPosicionLaser();
             if (!p0.detected) {
                 calibrando = false;
-                alert("No se detectó el punto láser para iniciar la calibración. Asegúrate que el láser esté encendido y visible.");
+                alert("No se detecta el laser. Verifica que este encendido y visible.");
                 actualizarUIEsquinas();
                 return;
             }
 
-            // 2. Probar Rotación (+14 grados)
-            const dRot = 14;
+            const dRot = 14, dCab = 14;
             await moverServos(110, 120 + dRot);
             const pRot = await medirPosicionLaser();
-
-            // 3. Probar Cabeceo (+14 grados)
-            const dCab = 14;
             await moverServos(110 + dCab, 120);
             const pCab = await medirPosicionLaser();
 
-            // Calcular matriz Jacobiana 2x2
-            const dx_drot = (pRot.x - p0.x) / dRot;
-            const dy_drot = (pRot.y - p0.y) / dRot;
-            const dx_dcab = (pCab.x - p0.x) / dCab;
-            const dy_dcab = (pCab.y - p0.y) / dCab;
-            jacobianMatrix = { dx_dcab, dx_drot, dy_dcab, dy_drot };
+            jacobianMatrix = {
+                dx_drot: (pRot.x - p0.x) / dRot,
+                dy_drot: (pRot.y - p0.y) / dRot,
+                dx_dcab: (pCab.x - p0.x) / dCab,
+                dy_dcab: (pCab.y - p0.y) / dCab
+            };
             localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
-
             await moverServos(110, 120);
 
-            // 4. Alinear cada una de las 4 esquinas del rectángulo
             const targets = [
                 { key: "TL", name: "Superior Izquierda", pt: rectArea.TL },
                 { key: "TR", name: "Superior Derecha", pt: rectArea.TR },
@@ -773,8 +731,8 @@
 
             for (let i = 0; i < targets.length; i++) {
                 const t = targets[i];
-                document.getElementById('stepBadge').innerText = `Esquina ${i+1}/4`;
-                document.getElementById('instructionText').innerText = `Alineando láser con ${t.name}...`;
+                document.getElementById('stepBadge').innerText = `${i+1} / 4`;
+                document.getElementById('instructionText').innerText = `Alineando: ${t.name}`;
 
                 for (let step = 0; step < 8; step++) {
                     const res = await fetch('/api/align_step', {
@@ -786,7 +744,7 @@
                             target_y: t.pt.y,
                             cabeceo_actual: cabeceoActual,
                             rotacion_actual: rotacionActual,
-                            dx_dcab, dx_drot, dy_dcab, dy_drot
+                            ...jacobianMatrix
                         })
                     });
                     const d = await res.json();
@@ -801,8 +759,6 @@
                 cal[`r${t.key}`] = rotacionActual;
             }
 
-            // 5. Guardar en Backend + ESP32 NVS y centrar
-            document.getElementById('instructionText').innerText = "Guardando Área Segura en el ESP32...";
             await fetch('/api/save_safe_area', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -810,12 +766,125 @@
             });
 
             calibrando = false;
-            document.getElementById('stepBadge').innerText = "¡Listo!";
-            document.getElementById('instructionText').innerText = "Área Segura calibrada y guardada en ESP32.";
+            document.getElementById('stepBadge').innerText = "Listo";
+            document.getElementById('instructionText').innerText = "Area Segura calibrada y guardada.";
             cambiarVista('control');
         }
 
-        // CONTROL INTERACTIVO DEL CUADRADO DE ÁREA SEGURA
+        async function apuntarAObjetivo(targetX, targetY, label) {
+            calibrando = true;
+            document.getElementById('stepBadge').innerText = "Apuntando";
+            document.getElementById('instructionText').innerText = `Señalando: ${label}`;
+
+            if (!jacobianMatrix) {
+                const p0 = await medirPosicionLaser();
+                if (p0.detected) {
+                    const baseCab = cabeceoActual;
+                    const baseRot = rotacionActual;
+                    const dRot = baseRot > 150 ? -12 : 12;
+                    const dCab = baseCab > 150 ? -12 : 12;
+                    await moverServos(baseCab, baseRot + dRot);
+                    const pRot = await medirPosicionLaser();
+                    await moverServos(baseCab + dCab, baseRot);
+                    const pCab = await medirPosicionLaser();
+                    jacobianMatrix = {
+                        dx_drot: (pRot.x - p0.x) / dRot,
+                        dy_drot: (pRot.y - p0.y) / dRot,
+                        dx_dcab: (pCab.x - p0.x) / dCab,
+                        dy_dcab: (pCab.y - p0.y) / dCab
+                    };
+                    localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
+                    await moverServos(baseCab, baseRot);
+                }
+            }
+
+            const j = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
+            for (let step = 0; step < 8; step++) {
+                const res = await fetch('/api/align_step', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_base64: capturarFrameBase64(480),
+                        target_x: targetX,
+                        target_y: targetY,
+                        cabeceo_actual: cabeceoActual,
+                        rotacion_actual: rotacionActual,
+                        ...j
+                    })
+                });
+                const d = await res.json();
+                if (d.nuevo_cabeceo !== undefined) {
+                    cabeceoActual = d.nuevo_cabeceo;
+                    rotacionActual = d.nueva_rotacion;
+                }
+                if (d.alineado) break;
+                await new Promise(r => setTimeout(r, 360));
+            }
+
+            calibrando = false;
+            document.getElementById('stepBadge').innerText = "Señalado";
+            document.getElementById('instructionText').innerText = `Laser apuntando a: ${label}`;
+        }
+
+        async function identificarYSenalar() {
+            const btn = document.getElementById('btnIdentify');
+            const card = document.getElementById('identifyCard');
+            btn.disabled = true;
+            btn.innerText = "Analizando escena...";
+            document.getElementById('stepBadge').innerText = "IA";
+            document.getElementById('instructionText').innerText = "Identificando objetos en vision...";
+
+            try {
+                const res = await fetch('/api/identify_and_point', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(640) })
+                });
+                const d = await res.json();
+                if (d.error) {
+                    alert("Error IA: " + d.error);
+                    actualizarUIEsquinas();
+                    return;
+                }
+
+                detectedObject = {
+                    objeto: d.objeto,
+                    target_x: d.target_x,
+                    target_y: d.target_y,
+                    box: d.box
+                };
+
+                card.style.display = 'block';
+                document.getElementById('identifyTitle').innerText = d.objeto;
+                document.getElementById('identifyModel').innerText = d.model || "";
+                document.getElementById('identifyDesc').innerText = d.descripcion || "";
+
+                const chips = document.getElementById('otherChips');
+                chips.innerHTML = "";
+                if (d.otros && d.otros.length > 0) {
+                    d.otros.forEach(o => {
+                        const btnChip = document.createElement('button');
+                        btnChip.className = 'obj-chip';
+                        btnChip.innerText = o.nombre;
+                        btnChip.onclick = () => {
+                            detectedObject = { objeto: o.nombre, target_x: o.x, target_y: o.y, box: o.box };
+                            document.getElementById('identifyTitle').innerText = o.nombre;
+                            apuntarAObjetivo(o.x, o.y, o.nombre);
+                        };
+                        chips.appendChild(btnChip);
+                    });
+                }
+
+                await apuntarAObjetivo(d.target_x, d.target_y, d.objeto);
+            } catch (e) {
+                alert("Error de conexion: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Identificar y Señalar con Laser";
+            }
+        }
+
+        // CONTROL DEL CUADRADO DE ÁREA SEGURA
         const pad = document.getElementById('safePad');
         const cursor = document.getElementById('laserCursor');
         let draggingPad = false;
@@ -862,8 +931,11 @@
         async function toggleLaser() {
             const res = await fetch('/api/esp32/laser', { method: 'POST' });
             const data = await res.json();
-            document.getElementById('btnLaserToggle').classList.toggle('on', data.laser);
-            document.getElementById('btnLaserCtrl').classList.toggle('on', data.laser);
+            const on = !!data.laser;
+            document.getElementById('btnLaserToggle').classList.toggle('on', on);
+            document.getElementById('btnLaserCtrl').classList.toggle('on', on);
+            document.getElementById('btnLaserToggle').innerText = on ? 'Laser: ON' : 'Laser: OFF';
+            document.getElementById('btnLaserCtrl').innerText = on ? 'Laser: ON' : 'Laser: OFF';
         }
 
         async function togglePatrulla() {
@@ -885,147 +957,17 @@
             if (d.cabeceo !== undefined) document.getElementById('ctrlC').innerText = d.cabeceo + '°';
             if (d.rotacion !== undefined) document.getElementById('ctrlR').innerText = d.rotacion + '°';
             if (d.cal) {
-                document.getElementById('padTL').innerText = `TL (${d.cal.cTL}°/${d.cal.rTL}°)`;
-                document.getElementById('padTR').innerText = `TR (${d.cal.cTR}°/${d.cal.rTR}°)`;
-                document.getElementById('padBL').innerText = `BL (${d.cal.cBL}°/${d.cal.rBL}°)`;
-                document.getElementById('padBR').innerText = `BR (${d.cal.cBR}°/${d.cal.rBR}°)`;
+                document.getElementById('padTL').innerText = `TL ${d.cal.cTL}°/${d.cal.rTL}°`;
+                document.getElementById('padTR').innerText = `TR ${d.cal.cTR}°/${d.cal.rTR}°`;
+                document.getElementById('padBL').innerText = `BL ${d.cal.cBL}°/${d.cal.rBL}°`;
+                document.getElementById('padBR').innerText = `BR ${d.cal.cBR}°/${d.cal.rBR}°`;
+            }
+            const btnP = document.getElementById('btnPatrulla');
+            if (btnP && d.rect !== undefined) {
+                btnP.innerText = d.rect ? 'Pausar Patrullaje' : 'Patrullar Perimetro';
             }
         }
 
-        async function analizarConGemini() {
-            document.getElementById('geminiModal').style.display = 'flex';
-            document.getElementById('geminiModalTitle').innerText = "🧠 Análisis Visual (Gemini 3.8 Flash)";
-            document.getElementById('geminiText').innerText = "Capturando foto y consultando con Gemini 3.8 Flash...";
-            try {
-                const res = await fetch('/api/gemini_analyze', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_base64: capturarFrameBase64(640) })
-                });
-                const d = await res.json();
-                if (d.model) document.getElementById('geminiModalTitle').innerText = `🧠 Análisis Visual (${d.model})`;
-                document.getElementById('geminiText').innerText = d.analysis || d.error || "Sin respuesta.";
-            } catch (e) {
-                document.getElementById('geminiText').innerText = "Error: " + e.message;
-            }
-        }
-
-        async function apuntarAObjetivo(targetX, targetY, label) {
-            calibrando = true;
-            document.getElementById('stepBadge').innerText = "Apuntando";
-            document.getElementById('instructionText').innerText = `Llevando láser hacia: ${label}...`;
-
-            // Si aún no hay Jacobiano medido, medir ejes rápidamente
-            if (!jacobianMatrix) {
-                const p0 = await medirPosicionLaser();
-                if (p0.detected) {
-                    const baseCab = cabeceoActual;
-                    const baseRot = rotacionActual;
-                    const dRot = baseRot > 150 ? -12 : 12;
-                    const dCab = baseCab > 150 ? -12 : 12;
-                    await moverServos(baseCab, baseRot + dRot);
-                    const pRot = await medirPosicionLaser();
-                    await moverServos(baseCab + dCab, baseRot);
-                    const pCab = await medirPosicionLaser();
-                    jacobianMatrix = {
-                        dx_drot: (pRot.x - p0.x) / dRot,
-                        dy_drot: (pRot.y - p0.y) / dRot,
-                        dx_dcab: (pCab.x - p0.x) / dCab,
-                        dy_dcab: (pCab.y - p0.y) / dCab
-                    };
-                    localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
-                    await moverServos(baseCab, baseRot);
-                }
-            }
-
-            const j = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
-            for (let step = 0; step < 8; step++) {
-                const res = await fetch('/api/align_step', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image_base64: capturarFrameBase64(480),
-                        target_x: targetX,
-                        target_y: targetY,
-                        cabeceo_actual: cabeceoActual,
-                        rotacion_actual: rotacionActual,
-                        dx_dcab: j.dx_dcab,
-                        dx_drot: j.dx_drot,
-                        dy_dcab: j.dy_dcab,
-                        dy_drot: j.dy_drot
-                    })
-                });
-                const d = await res.json();
-                if (d.nuevo_cabeceo !== undefined) {
-                    cabeceoActual = d.nuevo_cabeceo;
-                    rotacionActual = d.nueva_rotacion;
-                }
-                if (d.alineado) break;
-                await new Promise(r => setTimeout(r, 360));
-            }
-
-            calibrando = false;
-            document.getElementById('stepBadge').innerText = "Señalado";
-            document.getElementById('instructionText').innerText = `Láser señalando: ${label}`;
-        }
-
-        async function identificarYSenalar() {
-            const btn = document.getElementById('btnIdentify');
-            const card = document.getElementById('identifyCard');
-            btn.disabled = true;
-            btn.innerText = "⏳ Identificando escena con Gemini 3.8...";
-            document.getElementById('stepBadge').innerText = "IA";
-            document.getElementById('instructionText').innerText = "Analizando lo que hay en el rango de visión...";
-
-            try {
-                const res = await fetch('/api/identify_and_point', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_base64: capturarFrameBase64(640) })
-                });
-                const d = await res.json();
-                if (d.error) {
-                    alert("Error al identificar: " + d.error);
-                    return;
-                }
-
-                detectedObject = {
-                    objeto: d.objeto,
-                    target_x: d.target_x,
-                    target_y: d.target_y,
-                    box: d.box
-                };
-
-                card.style.display = 'block';
-                document.getElementById('identifyTitle').innerText = `🔍 Detectado: ${d.objeto}`;
-                document.getElementById('identifyDesc').innerText = d.descripcion || "";
-
-                const chips = document.getElementById('otherChips');
-                chips.innerHTML = "";
-                if (d.otros && d.otros.length > 0) {
-                    d.otros.forEach(o => {
-                        const btnChip = document.createElement('button');
-                        btnChip.className = 'obj-chip';
-                        btnChip.innerText = `🎯 Señalar: ${o.nombre}`;
-                        btnChip.onclick = () => {
-                            detectedObject = { objeto: o.nombre, target_x: o.x, target_y: o.y, box: o.box };
-                            document.getElementById('identifyTitle').innerText = `🔍 Señalando: ${o.nombre}`;
-                            apuntarAObjetivo(o.x, o.y, o.nombre);
-                        };
-                        chips.appendChild(btnChip);
-                    });
-                }
-
-                await apuntarAObjetivo(d.target_x, d.target_y, d.objeto);
-            } catch (e) {
-                alert("Error de conexión: " + e.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "🔍 Identificar y Señalar con Láser";
-            }
-        }
-
-        function cerrarModal() { document.getElementById('geminiModal').style.display = 'none'; }
         window.addEventListener('DOMContentLoaded', initCamera);
     </script>
 </body>

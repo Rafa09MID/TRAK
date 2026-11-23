@@ -84,6 +84,49 @@ def decodificar_imagen(base64_str: str) -> np.ndarray:
     nparr = np.frombuffer(img_bytes, np.uint8)
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+def llamar_gemini_rapido(img_bytes: bytes, prompt_text: str, json_mode: bool = False):
+    """
+    Llama a la API REST de Gemini con timeout corto y sin reintentos bloqueantes,
+    priorizando gemini-3.8-flash y cayendo en <0.5s al siguiente modelo disponible si hay 503.
+    """
+    models_to_try = [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.5-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash"
+    ]
+    b64_img = base64.b64encode(img_bytes).decode("utf-8")
+    body = {
+        "contents": [{
+            "parts": [
+                {"inline_data": {"mime_type": "image/jpeg", "data": b64_img}},
+                {"text": prompt_text}
+            ]
+        }]
+    }
+    if json_mode:
+        body["generationConfig"] = {"responseMimeType": "application/json"}
+
+    last_err = ""
+    for m in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={GEMINI_API_KEY}"
+        try:
+            res = requests.post(url, json=body, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts and "text" in parts[0]:
+                        return parts[0]["text"], m
+            last_err = f"{m}: HTTP {res.status_code}"
+            print(f"Fallback rapido ({last_err})")
+        except Exception as ex:
+            last_err = f"{m}: {ex}"
+            print(f"Fallback rapido ({last_err})")
+    return None, last_err
+
 def detectar_laser_opencv(img_bgr: np.ndarray):
     """
     Detector de alta precisión calibrado para cámara de celular:
@@ -173,30 +216,10 @@ def api_gemini_analyze(payload: ImagePayload):
             "debe moverse el gimbal para alcanzar la zona deseada. Responde de forma concisa y técnica."
         )
 
-        # Prioridad Gemini 3.8 Flash, con fallback a 3.7 y 3.5 en caso de alta demanda
-        models_to_try = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
-        response_text = None
-        selected_model = None
-
-        for model_candidate in models_to_try:
-            try:
-                response = ai_client.models.generate_content(
-                    model=model_candidate,
-                    contents=[
-                        types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"),
-                        prompt_text
-                    ]
-                )
-                if response and response.text:
-                    response_text = response.text
-                    selected_model = model_candidate
-                    break
-            except Exception as model_err:
-                print(f"Aviso: {model_candidate} con pico de demanda, probando siguiente modelo...")
-                continue
+        response_text, selected_model = llamar_gemini_rapido(img_bytes, prompt_text, json_mode=False)
 
         if not response_text:
-            return JSONResponse(status_code=500, content={"error": "Modelos de Gemini en alta demanda temporal. Reintenta en unos segundos."})
+            return JSONResponse(status_code=500, content={"error": f"Modelos de Gemini en alta demanda ({selected_model}). Reintenta."})
 
         return {"analysis": response_text, "model": selected_model}
     except Exception as e:
@@ -227,35 +250,14 @@ def api_identify_and_point(payload: ImagePayload):
             "}"
         )
 
-        models_to_try = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash"]
-        parsed = None
-        selected_model = None
+        raw_text, selected_model = llamar_gemini_rapido(img_bytes, prompt_text, json_mode=True)
+        if not raw_text:
+            return JSONResponse(status_code=500, content={"error": f"No se pudo identificar objetos ({selected_model})."})
 
-        for model_candidate in models_to_try:
-            try:
-                response = ai_client.models.generate_content(
-                    model=model_candidate,
-                    contents=[
-                        types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"),
-                        prompt_text
-                    ],
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json"
-                    )
-                )
-                if response and response.text:
-                    raw = response.text.strip()
-                    if raw.startswith("```"):
-                        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-                    parsed = json.loads(raw)
-                    selected_model = model_candidate
-                    break
-            except Exception as model_err:
-                print(f"Aviso identify_and_point ({model_candidate}): {model_err}")
-                continue
-
-        if not parsed:
-            return JSONResponse(status_code=500, content={"error": "No se pudo identificar objetos en este momento."})
+        raw = raw_text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        parsed = json.loads(raw)
 
         box = parsed.get("box_2d", [400, 400, 600, 600])
         if len(box) != 4:
