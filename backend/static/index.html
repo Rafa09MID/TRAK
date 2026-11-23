@@ -1175,7 +1175,8 @@
                 cal[`r${t.key}`] = rotacionActual;
                 camCorners.push([lastLx, lastLy]);
 
-                // Disparar animacion de flecha / palomita de esquina registrada
+                // Disparar animacion de flecha / palomita de esquina registrada y notificar OLED + Buzzer
+                notificarESP32(`Esquina ${t.coordLabel}`, 'confirm');
                 registeredCornerAnims.push({
                     x: lastLx,
                     y: lastLy,
@@ -1436,6 +1437,7 @@
                 }
 
                 const top = lista[0];
+                notificarESP32(top.nombre, 'detect');
                 detectedObject = { objeto: top.nombre, target_x: top.x, target_y: top.y, box: top.box };
                 document.getElementById('identifyTitle').innerText = `${top.nombre} (${lista.length} encontrados)`;
                 document.getElementById('identifyDesc').innerText = `Detectado localmente en ${d.ms} ms. Toca cualquier etiqueta para señalar:`;
@@ -1655,9 +1657,19 @@
             sincronizarBarrasEjes();
         }
 
+        function notificarESP32(text, beep = 'none') {
+            fetch('/api/esp32/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, beep })
+            }).catch(() => {});
+        }
+
         async function capturarEsquinaJoystick() {
             const c = JOY_CORNERS[joyStep];
             if (!c) return;
+
+            notificarESP32(`Esquina ${c.label}`, 'confirm');
 
             const det = await medirPosicionLaser();
             const lx = det.detected ? det.x : (c.key.includes('L') ? 0.15 : 0.85);

@@ -4,6 +4,9 @@
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <Preferences.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <Adafruit_NeoPixel.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
@@ -20,28 +23,34 @@ const char* AP_PASS       = "12345678";
 #define PIN_CABECEO   4   // Servo cabeceo (Pin 4)
 #define PIN_ROTACION  5   // Servo rotación (Pin 5)
 #define PIN_LASER     6   // Láser (Pin 6)
+#define PIN_BUZZER    7   // Buzzer 2 pines (Pin 7)
+#define PIN_OLED_SDA  8   // OLED SDA (Pin 8)
+#define PIN_OLED_SCL  9   // OLED SCL (Pin 9)
 #define PIN_BOTON     0   // Botón BOOT
 
 // PWM por Hardware Puro (LEDC)
 #define CANAL_CABECEO   0
 #define CANAL_ROTACION  1
+#define CANAL_BUZZER    2
 #define PWM_FREQ        50
 #define PWM_RES         14
 
 #define DUTY_MIN  410   // 0°
 #define DUTY_MAX  1966  // 180°
 
-// -------------------------------------------------------------
-// COORDENADAS CALIBRADAS DE LAS 4 ESQUINAS (ZONA SEGURA)
-// Se guardan en memoria no volátil (NVS) para persistir tras reinicios
-// -------------------------------------------------------------
+// Pantalla OLED 0.96" 128x64
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+bool oledDisponible = false;
+
 Preferences prefs;
 
-// Valores por defecto (se sobrescriben al calibrar desde la web)
-int cTL = 150, rTL = 68;   // Esquina Superior Izquierda (u=0, v=0)
-int cTR = 150, rTR = 180;  // Esquina Superior Derecha   (u=1, v=0)
-int cBR = 81,  rBR = 180;  // Esquina Inferior Derecha   (u=1, v=1)
-int cBL = 81,  rBL = 68;   // Esquina Inferior Izquierda (u=0, v=1)
+// Coordenadas calibradas de las 4 esquinas
+int cTL = 150, rTL = 68;
+int cTR = 150, rTR = 180;
+int cBR = 81,  rBR = 180;
+int cBL = 81,  rBL = 68;
 
 // Pines RGB de la placa
 const int RGB_PINS[] = {48, 38, 21};
@@ -61,8 +70,123 @@ bool modoRectangulo = false;
 int ladoActual = 1;
 float pasoPerimetro = 0.0;
 
+String textoOledPrincipal = "Listo para apuntar";
+bool oledNecesitaActualizar = true;
+
 unsigned long ultimoDebounce = 0;
 unsigned long ultimoPasoRect = 0;
+
+// Estado no bloqueante del Buzzer
+int buzzerPaso = 0;
+int buzzerModo = 0; // 0=off, 1=confirm, 2=detect
+unsigned long buzzerTimer = 0;
+
+String sanitizarASCII(String s) {
+    s.replace("á", "a"); s.replace("é", "e"); s.replace("í", "i");
+    s.replace("ó", "o"); s.replace("ú", "u"); s.replace("ñ", "n");
+    s.replace("Á", "A"); s.replace("É", "E"); s.replace("Í", "I");
+    s.replace("Ó", "O"); s.replace("Ú", "U"); s.replace("Ñ", "N");
+    s.replace("ü", "u"); s.replace("Ü", "U");
+    return s;
+}
+
+void iniciarBuzzer(int modo) {
+    buzzerModo = modo;
+    buzzerPaso = 1;
+    buzzerTimer = millis();
+    if (modo == 1) {
+        // Confirmación: tono corto nítido 2200 Hz
+        ledcWriteTone(CANAL_BUZZER, 2200);
+    } else if (modo == 2) {
+        // Detección de objeto: doble tono ascendente 1700 -> 2500 Hz
+        ledcWriteTone(CANAL_BUZZER, 1700);
+    }
+}
+
+void actualizarBuzzer() {
+    if (buzzerModo == 0) return;
+    unsigned long dt = millis() - buzzerTimer;
+    if (buzzerModo == 1) {
+        if (buzzerPaso == 1 && dt >= 110) {
+            ledcWriteTone(CANAL_BUZZER, 0);
+            buzzerModo = 0;
+        }
+    } else if (buzzerModo == 2) {
+        if (buzzerPaso == 1 && dt >= 95) {
+            ledcWriteTone(CANAL_BUZZER, 2500);
+            buzzerPaso = 2;
+            buzzerTimer = millis();
+        } else if (buzzerPaso == 2 && dt >= 140) {
+            ledcWriteTone(CANAL_BUZZER, 0);
+            buzzerModo = 0;
+        }
+    }
+}
+
+void dibujarOled() {
+    if (!oledDisponible) return;
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+
+    // Barra superior (y=0..12)
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("TRAK  L:");
+    display.print(estadoLaser ? "ON " : "OFF");
+
+    float cartX = (normU - 0.5f) * 10.0f;
+    float cartY = (0.5f - normV) * 10.0f;
+    display.setCursor(74, 0);
+    display.printf("%+.0f,%+.0f", cartX, cartY);
+    display.drawFastHLine(0, 11, 128, SSD1306_WHITE);
+
+    // Zona central: Objeto identificado por Gemini / OpenCV (ajustado al tamaño)
+    String msg = sanitizarASCII(textoOledPrincipal);
+    msg.trim();
+    if (msg.length() == 0) msg = "En espera";
+
+    display.setCursor(0, 15);
+    display.setTextSize(1);
+    display.println("OBJETO:");
+
+    display.setTextWrap(true);
+    if (msg.length() <= 10) {
+        // Texto grande si cabe en 1 linea (max 10 chars a size 2)
+        display.setTextSize(2);
+        display.setCursor(0, 27);
+        display.println(msg);
+    } else if (msg.length() <= 20) {
+        // Texto grande en 2 lineas
+        display.setTextSize(2);
+        display.setCursor(0, 24);
+        display.println(msg.substring(0, 10));
+        display.setCursor(0, 41);
+        display.println(msg.substring(10));
+    } else {
+        // Texto compacto size 1 (21 chars/linea x 3 lineas = 63 chars sin desbordar)
+        display.setTextSize(1);
+        display.setCursor(0, 26);
+        if (msg.length() > 60) msg = msg.substring(0, 57) + "...";
+        display.println(msg);
+    }
+
+    // Pie de pantalla (y=56)
+    display.setTextSize(1);
+    display.drawFastHLine(0, 54, 128, SSD1306_WHITE);
+    display.setCursor(0, 56);
+    display.printf("C:%d R:%d", anguloCabeceo, anguloRotacion);
+    display.setCursor(72, 56);
+    if (WiFi.status() == WL_CONNECTED) {
+        String ip = WiFi.localIP().toString();
+        int lastDot = ip.lastIndexOf('.');
+        display.print("." + ip.substring(lastDot + 1) + " OK");
+    } else {
+        display.print("AP Mode");
+    }
+
+    display.display();
+    oledNecesitaActualizar = false;
+}
 
 void ponerColorLed(uint8_t r, uint8_t g, uint8_t b) {
     led48.setPixelColor(0, led48.Color(r, g, b));
@@ -80,20 +204,22 @@ void moverCabeceoHW(int angulo) {
     anguloCabeceo = constrain(angulo, 0, 180);
     int duty = map(anguloCabeceo, 0, 180, DUTY_MIN, DUTY_MAX);
     ledcWrite(CANAL_CABECEO, duty);
+    oledNecesitaActualizar = true;
 }
 
 void moverRotacionHW(int angulo) {
     anguloRotacion = constrain(angulo, 0, 180);
     int duty = map(anguloRotacion, 0, 180, DUTY_MIN, DUTY_MAX);
     ledcWrite(CANAL_ROTACION, duty);
+    oledNecesitaActualizar = true;
 }
 
 void actualizarLaser(bool encender) {
     estadoLaser = encender;
     digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+    oledNecesitaActualizar = true;
 }
 
-// Interpolación bilineal dentro del Área Segura: u in [0,1], v in [0,1]
 void moverNormalizado(float u, float v) {
     u = constrain(u, 0.0f, 1.0f);
     v = constrain(v, 0.0f, 1.0f);
@@ -138,303 +264,71 @@ void guardarCalibracion() {
     prefs.end();
 }
 
-// -------------------------------------------------------------
-// PÁGINA WEB LOCAL DEL LÁSER (ÁREA SEGURA INTERACTIVA)
-// -------------------------------------------------------------
+// Web local embebida
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TRAK - Control Área Segura</title>
+    <title>TRAK - Area Segura</title>
     <style>
-        :root {
-            --bg: #070b14;
-            --card: rgba(15, 23, 42, 0.94);
-            --border: rgba(255, 255, 255, 0.12);
-            --primary: #00d2ff;
-            --primary-glow: rgba(0, 210, 255, 0.4);
-            --safe: #10b981;
-            --safe-glow: rgba(16, 185, 129, 0.45);
-            --laser-on: #ff0055;
-            --laser-glow: rgba(255, 0, 85, 0.6);
-            --text: #f8fafc;
-            --text-dim: #94a3b8;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body {
-            background: radial-gradient(circle at 50% 0%, #162238, var(--bg));
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 14px;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .container {
-            width: 100%;
-            max-width: 440px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 20px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.65);
-        }
-        header { text-align: center; margin-bottom: 14px; }
-        header h1 { font-size: 1.25rem; font-weight: 800; color: var(--primary); letter-spacing: 0.5px; text-shadow: 0 0 12px var(--primary-glow); }
-        .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: var(--safe); margin-top: 6px; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3); }
-        .status-box {
-            background: rgba(0,0,0,0.35);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 10px;
-            margin-bottom: 14px;
-            display: flex;
-            justify-content: space-around;
-            text-align: center;
-        }
-        .status-item span { display: block; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; }
-        .status-item b { font-size: 1.05rem; color: var(--primary); }
-
-        /* CUADRADO INTERACTIVO DEL ÁREA SEGURA */
-        .touchpad-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 1 / 1;
-            background: radial-gradient(circle at center, rgba(16, 185, 129, 0.08), rgba(0, 0, 0, 0.55));
-            border: 2px solid var(--safe);
-            border-radius: 18px;
-            box-shadow: 0 0 25px rgba(16, 185, 129, 0.18), inset 0 0 25px rgba(16, 185, 129, 0.08);
-            margin-bottom: 14px;
-            overflow: hidden;
-            touch-action: none;
-            cursor: crosshair;
-        }
-        .grid-lines {
-            position: absolute;
-            inset: 0;
-            background-image:
-                linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px);
-            background-size: 25% 25%;
-            pointer-events: none;
-        }
-        .crosshair-center {
-            position: absolute;
-            left: 50%; top: 50%;
-            width: 18px; height: 18px;
-            transform: translate(-50%, -50%);
-            border: 1px dashed rgba(255,255,255,0.35);
-            border-radius: 50%;
-            pointer-events: none;
-        }
-        .corner-tag {
-            position: absolute;
-            font-size: 0.62rem;
-            font-weight: 700;
-            color: rgba(16, 185, 129, 0.85);
-            padding: 4px 6px;
-            pointer-events: none;
-        }
-        .tag-tl { top: 2px; left: 4px; }
-        .tag-tr { top: 2px; right: 4px; }
-        .tag-bl { bottom: 2px; left: 4px; }
-        .tag-br { bottom: 2px; right: 4px; }
-
-        #laserCursor {
-            position: absolute;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background: radial-gradient(circle, #ffffff 18%, #ff0055 45%, rgba(255,0,85,0) 75%);
-            box-shadow: 0 0 18px #ff0055;
-            transform: translate(-50%, -50%);
-            left: 50%;
-            top: 50%;
-            pointer-events: none;
-            transition: left 0.05s linear, top 0.05s linear;
-        }
-
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button {
-            padding: 13px 10px;
-            border-radius: 13px;
-            border: 1px solid var(--border);
-            background: rgba(255,255,255,0.06);
-            color: var(--text);
-            font-size: 0.85rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-        button:active { transform: scale(0.96); }
-        .btn-center {
-            background: var(--primary);
-            color: #05101d;
-            border-color: var(--primary);
-            box-shadow: 0 0 16px var(--primary-glow);
-        }
-        .btn-laser {
-            background: rgba(255, 0, 85, 0.14);
-            border-color: rgba(255, 0, 85, 0.35);
-            color: #ff3377;
-        }
-        .btn-laser.active {
-            background: var(--laser-on);
-            color: white;
-            box-shadow: 0 0 22px var(--laser-glow);
-        }
-        .btn-rect {
-            grid-column: span 2;
-            background: rgba(16, 185, 129, 0.14);
-            border-color: rgba(16, 185, 129, 0.4);
-            color: #34d399;
-        }
-        .btn-rect.active {
-            background: var(--safe);
-            color: #05101d;
-            box-shadow: 0 0 20px var(--safe-glow);
-        }
-        footer { text-align: center; margin-top: 12px; font-size: 0.68rem; color: var(--text-dim); }
+        :root { --bg:#F5F5F7; --card:#FFFFFF; --border:rgba(0,0,0,0.08); --blue:#007AFF; --green:#34C759; --red:#FF3B30; --text:#1D1D1F; --dim:#86868B; }
+        * { box-sizing:border-box; margin:0; padding:0; font-family:-apple-system,BlinkMacSystemFont,sans-serif; }
+        body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; justify-content:center; align-items:center; padding:14px; }
+        .container { width:100%; max-width:420px; background:var(--card); border:1px solid var(--border); border-radius:20px; padding:18px; box-shadow:0 4px 20px rgba(0,0,0,0.05); }
+        header { text-align:center; margin-bottom:12px; }
+        header h1 { font-size:1.15rem; font-weight:700; }
+        .badge { font-size:0.75rem; color:var(--dim); margin-top:4px; }
+        .status-box { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; text-align:center; }
+        .status-item { background:var(--bg); border-radius:12px; padding:8px; }
+        .status-item span { display:block; font-size:0.64rem; color:var(--dim); text-transform:uppercase; }
+        .status-item b { font-size:0.95rem; }
+        .touchpad { position:relative; width:100%; aspect-ratio:1/1; background:#fff; border:2px solid var(--green); border-radius:16px; margin-bottom:12px; touch-action:none; cursor:crosshair; }
+        #laserCursor { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--red); border:3px solid #fff; box-shadow:0 2px 8px rgba(255,59,48,0.5); transform:translate(-50%,-50%); left:50%; top:50%; pointer-events:none; }
+        .btn-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        button { padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--bg); font-weight:600; font-size:0.85rem; cursor:pointer; }
+        .btn-blue { background:var(--blue); color:#fff; border-color:var(--blue); }
+        .btn-red.active { background:var(--red); color:#fff; border-color:var(--red); }
+        .btn-full { grid-column:span 2; background:var(--green); color:#fff; border-color:var(--green); }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>⚡ TRAK ÁREA SEGURA</h1>
-            <div class="badge" id="ladoBadge">Pulsa en el cuadrado para mover el láser</div>
-        </header>
-
+        <header><h1>TRAK Area Segura</h1><div class="badge" id="oledTxt">Listo</div></header>
         <div class="status-box">
-            <div class="status-item"><span>Posición (X, Y)</span><b id="statusXY">50%, 50%</b></div>
-            <div class="status-item"><span>Cabeceo</span><b id="statusC">--°</b></div>
-            <div class="status-item"><span>Rotación</span><b id="statusR">--°</b></div>
-            <div class="status-item"><span>Láser</span><b id="statusL">ON</b></div>
+            <div class="status-item"><span>Coord</span><b id="sXY">0.0, 0.0</b></div>
+            <div class="status-item"><span>Cabeceo</span><b id="sC">--°</b></div>
+            <div class="status-item"><span>Rotacion</span><b id="sR">--°</b></div>
         </div>
-
-        <div class="touchpad-wrapper" id="safePad">
-            <div class="grid-lines"></div>
-            <div class="crosshair-center"></div>
-            <span class="corner-tag tag-tl" id="tagTL">TL</span>
-            <span class="corner-tag tag-tr" id="tagTR">TR</span>
-            <span class="corner-tag tag-bl" id="tagBL">BL</span>
-            <span class="corner-tag tag-br" id="tagBR">BR</span>
-            <div id="laserCursor"></div>
-        </div>
-
+        <div class="touchpad" id="pad"><div id="laserCursor"></div></div>
         <div class="btn-grid">
-            <button class="btn-center" onclick="irAlCentro()">🎯 Centro Área Segura</button>
-            <button id="btnLaser" class="btn-laser active" onclick="toggleLaser()">⚡ Láser: <span id="laserText">ON</span></button>
-            <button id="btnRect" class="btn-rect" onclick="toggleRect()">📐 Patrullar Perímetro del Área Segura</button>
+            <button class="btn-blue" onclick="fetch('/api/center',{method:'POST'}).then(r=>r.json()).then(ui)">Centro</button>
+            <button id="btnL" class="btn-red active" onclick="fetch('/api/laser/toggle',{method:'POST'}).then(r=>r.json()).then(ui)">Laser: ON</button>
+            <button class="btn-full" onclick="fetch('/api/rect/toggle',{method:'POST'}).then(r=>r.json()).then(ui)">Patrullar Perimetro</button>
         </div>
-
-        <footer id="calFooter">Cargando calibración...</footer>
     </div>
-
     <script>
-        const pad = document.getElementById('safePad');
-        const cursor = document.getElementById('laserCursor');
-        let dragging = false;
-        let lastSend = 0;
-
-        function enviarCoordenada(u, v, force = false) {
-            u = Math.max(0, Math.min(1, u));
-            v = Math.max(0, Math.min(1, v));
-
-            cursor.style.left = (u * 100) + '%';
-            cursor.style.top = (v * 100) + '%';
-            document.getElementById('statusXY').innerText = `${Math.round(u*100)}%, ${Math.round(v*100)}%`;
-
-            const now = Date.now();
-            if (!force && now - lastSend < 65) return;
-            lastSend = now;
-
-            fetch(`/api/move_norm?u=${u.toFixed(3)}&v=${v.toFixed(3)}`, { method: 'POST' })
-                .then(r => r.json())
-                .then(aplicarEstado)
-                .catch(() => {});
+        const pad=document.getElementById('pad'), cur=document.getElementById('laserCursor');
+        let drag=false, last=0;
+        function send(u,v,f){
+            u=Math.max(0,Math.min(1,u)); v=Math.max(0,Math.min(1,v));
+            cur.style.left=(u*100)+'%'; cur.style.top=(v*100)+'%';
+            document.getElementById('sXY').innerText=((u-0.5)*10).toFixed(1)+', '+((0.5-v)*10).toFixed(1);
+            if(!f && Date.now()-last<65) return; last=Date.now();
+            fetch(`/api/move_norm?u=${u.toFixed(3)}&v=${v.toFixed(3)}`,{method:'POST'}).then(r=>r.json()).then(ui);
         }
-
-        function procesarEventoPad(e, force = false) {
-            const rect = pad.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const u = (clientX - rect.left) / rect.width;
-            const v = (clientY - rect.top) / rect.height;
-            enviarCoordenada(u, v, force);
+        pad.onpointerdown=e=>{drag=true; const r=pad.getBoundingClientRect(); send((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height,true);};
+        pad.onpointermove=e=>{if(!drag)return; const r=pad.getBoundingClientRect(); send((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height,false);};
+        window.onpointerup=()=>{drag=false;};
+        function ui(d){
+            document.getElementById('sC').innerText=d.cabeceo+'°';
+            document.getElementById('sR').innerText=d.rotacion+'°';
+            document.getElementById('oledTxt').innerText=d.oled||'Listo';
+            document.getElementById('btnL').classList.toggle('active',d.laser);
+            document.getElementById('btnL').innerText=d.laser?'Laser: ON':'Laser: OFF';
         }
-
-        pad.addEventListener('pointerdown', (e) => { dragging = true; procesarEventoPad(e, true); });
-        pad.addEventListener('pointermove', (e) => { if (dragging) procesarEventoPad(e, false); });
-        window.addEventListener('pointerup', () => { dragging = false; });
-
-        function irAlCentro() {
-            enviarCoordenada(0.5, 0.5, true);
-        }
-
-        function toggleRect() {
-            fetch('/api/rect/toggle', { method: 'POST' }).then(r => r.json()).then(aplicarEstado);
-        }
-
-        function toggleLaser() {
-            fetch('/api/laser/toggle', { method: 'POST' }).then(r => r.json()).then(aplicarEstado);
-        }
-
-        function aplicarEstado(data) {
-            document.getElementById('statusC').innerText = data.cabeceo + '°';
-            document.getElementById('statusR').innerText = data.rotacion + '°';
-
-            if (!dragging && data.u !== undefined && data.v !== undefined) {
-                cursor.style.left = (data.u * 100) + '%';
-                cursor.style.top = (data.v * 100) + '%';
-                document.getElementById('statusXY').innerText = `${Math.round(data.u*100)}%, ${Math.round(data.v*100)}%`;
-            }
-
-            if (data.cal) {
-                document.getElementById('tagTL').innerText = `TL (${data.cal.cTL}°/${data.cal.rTL}°)`;
-                document.getElementById('tagTR').innerText = `TR (${data.cal.cTR}°/${data.cal.rTR}°)`;
-                document.getElementById('tagBL').innerText = `BL (${data.cal.cBL}°/${data.cal.rBL}°)`;
-                document.getElementById('tagBR').innerText = `BR (${data.cal.cBR}°/${data.cal.rBR}°)`;
-                document.getElementById('calFooter').innerText = `Esquinas guardadas en ESP32 NVS | Listo`;
-            }
-
-            const btnR = document.getElementById('btnRect');
-            const ladoB = document.getElementById('ladoBadge');
-            if (data.rect) {
-                btnR.classList.add('active');
-                btnR.innerText = '⏸️ Pausar Patrullaje del Área Segura';
-                ladoB.innerText = `Patrullando Lado ${data.lado} / 4`;
-            } else {
-                btnR.classList.remove('active');
-                btnR.innerText = '📐 Patrullar Perímetro del Área Segura';
-                ladoB.innerText = 'Pulsa en el cuadrado para mover el láser';
-            }
-
-            const btnL = document.getElementById('btnLaser');
-            const statusL = document.getElementById('statusL');
-            if (data.laser) {
-                btnL.classList.add('active');
-                document.getElementById('laserText').innerText = 'ON';
-                statusL.innerText = 'ON';
-                statusL.style.color = '#ff0055';
-            } else {
-                btnL.classList.remove('active');
-                document.getElementById('laserText').innerText = 'OFF';
-                statusL.innerText = 'OFF';
-                statusL.style.color = '#94a3b8';
-            }
-        }
-
-        function refrescar() {
-            if (!dragging) {
-                fetch('/api/status').then(r => r.json()).then(aplicarEstado).catch(() => {});
-            }
-        }
-        refrescar();
-        setInterval(refrescar, 500);
+        fetch('/api/status').then(r=>r.json()).then(ui);
     </script>
 </body>
 </html>
@@ -448,6 +342,7 @@ String jsonEstado() {
            ",\"laser\":" + (estadoLaser ? "true" : "false") +
            ",\"rect\":" + (modoRectangulo ? "true" : "false") +
            ",\"lado\":" + ladoActual +
+           ",\"oled\":\"" + sanitizarASCII(textoOledPrincipal) + "\"" +
            ",\"cal\":{\"cTL\":" + cTL + ",\"rTL\":" + rTL +
            ",\"cTR\":" + cTR + ",\"rTR\":" + rTR +
            ",\"cBR\":" + cBR + ",\"rBR\":" + rBR +
@@ -460,10 +355,8 @@ void handleStatus() { server.send(200, "application/json", jsonEstado()); }
 void handleSetServo() {
     if (server.hasArg("cabeceo") && server.hasArg("rotacion")) {
         modoRectangulo = false;
-        int c = server.arg("cabeceo").toInt();
-        int r = server.arg("rotacion").toInt();
-        moverCabeceoHW(c);
-        moverRotacionHW(r);
+        moverCabeceoHW(server.arg("cabeceo").toInt());
+        moverRotacionHW(server.arg("rotacion").toInt());
     }
     server.send(200, "application/json", jsonEstado());
 }
@@ -471,9 +364,7 @@ void handleSetServo() {
 void handleMoveNorm() {
     if (server.hasArg("u") && server.hasArg("v")) {
         modoRectangulo = false;
-        float u = server.arg("u").toFloat();
-        float v = server.arg("v").toFloat();
-        moverNormalizado(u, v);
+        moverNormalizado(server.arg("u").toFloat(), server.arg("v").toFloat());
     }
     server.send(200, "application/json", jsonEstado());
 }
@@ -500,6 +391,22 @@ void handleSafeArea() {
         guardarCalibracion();
         modoRectangulo = false;
         moverNormalizado(0.5f, 0.5f);
+        textoOledPrincipal = "Area Segura OK";
+        oledNecesitaActualizar = true;
+        iniciarBuzzer(1);
+    }
+    server.send(200, "application/json", jsonEstado());
+}
+
+void handleNotify() {
+    if (server.hasArg("text")) {
+        textoOledPrincipal = server.arg("text");
+        oledNecesitaActualizar = true;
+    }
+    if (server.hasArg("beep")) {
+        String b = server.arg("beep");
+        if (b == "confirm") iniciarBuzzer(1);
+        else if (b == "detect") iniciarBuzzer(2);
     }
     server.send(200, "application/json", jsonEstado());
 }
@@ -532,16 +439,28 @@ void setup() {
     led38.begin();
     led21.begin();
 
+    // Inicializar I2C y OLED 0.96" en GPIO 8 (SDA) y GPIO 9 (SCL)
+    Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
+    if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        oledDisponible = true;
+    } else if (display.begin(SSD1306_SWITCHCAPVCC, 0x3D)) {
+        oledDisponible = true;
+    }
+
+    // Configurar Buzzer LEDC en Canal 2 (GPIO 7)
+    ledcSetup(CANAL_BUZZER, 2000, 8);
+    ledcAttachPin(PIN_BUZZER, CANAL_BUZZER);
+    ledcWriteTone(CANAL_BUZZER, 0);
+
     cargarCalibracion();
 
-    // Configurar LEDC
+    // Configurar Servos LEDC
     ledcSetup(CANAL_CABECEO, PWM_FREQ, PWM_RES);
     ledcAttachPin(PIN_CABECEO, CANAL_CABECEO);
 
     ledcSetup(CANAL_ROTACION, PWM_FREQ, PWM_RES);
     ledcAttachPin(PIN_ROTACION, CANAL_ROTACION);
 
-    // Iniciar en el centro del Área Segura calibrada
     moverNormalizado(0.5f, 0.5f);
     ponerColorLed(0, 180, 255);
 
@@ -559,19 +478,27 @@ void setup() {
     server.on("/api/move_norm", HTTP_POST, handleMoveNorm);
     server.on("/api/center", HTTP_POST, handleCenter);
     server.on("/api/safe_area", HTTP_POST, handleSafeArea);
+    server.on("/api/notify", HTTP_POST, handleNotify);
     server.on("/api/laser/toggle", HTTP_POST, handleToggleLaser);
     server.on("/api/rect/toggle", HTTP_POST, handleToggleRect);
     server.begin();
 
-    // mDNS & OTA
     MDNS.begin("esp32-laser");
     ArduinoOTA.setHostname("esp32-laser");
     ArduinoOTA.begin();
+
+    dibujarOled();
+    iniciarBuzzer(1); // Pitido corto de arranque listo
 }
 
 void loop() {
     ArduinoOTA.handle();
     server.handleClient();
+    actualizarBuzzer();
+
+    if (oledNecesitaActualizar) {
+        dibujarOled();
+    }
 
     if (digitalRead(PIN_BOTON) == LOW) {
         if (millis() - ultimoDebounce > 300) {
@@ -585,7 +512,6 @@ void loop() {
         }
     }
 
-    // Patrullaje continuo usando las 4 esquinas calibradas (u, v)
     if (modoRectangulo) {
         if (millis() - ultimoPasoRect >= 25) {
             ultimoPasoRect = millis();
@@ -596,22 +522,10 @@ void loop() {
             }
 
             switch (ladoActual) {
-                case 1: // TL -> TR (Borde superior)
-                    ponerColorLed(0, 150, 255);
-                    moverNormalizado(pasoPerimetro, 0.0f);
-                    break;
-                case 2: // TR -> BR (Lateral derecho)
-                    ponerColorLed(0, 255, 60);
-                    moverNormalizado(1.0f, pasoPerimetro);
-                    break;
-                case 3: // BR -> BL (Borde inferior)
-                    ponerColorLed(255, 220, 0);
-                    moverNormalizado(1.0f - pasoPerimetro, 1.0f);
-                    break;
-                case 4: // BL -> TL (Lateral izquierdo)
-                    ponerColorLed(255, 0, 100);
-                    moverNormalizado(0.0f, 1.0f - pasoPerimetro);
-                    break;
+                case 1: ponerColorLed(0, 150, 255); moverNormalizado(pasoPerimetro, 0.0f); break;
+                case 2: ponerColorLed(0, 255, 60);  moverNormalizado(1.0f, pasoPerimetro); break;
+                case 3: ponerColorLed(255, 220, 0); moverNormalizado(1.0f - pasoPerimetro, 1.0f); break;
+                case 4: ponerColorLed(255, 0, 100); moverNormalizado(0.0f, 1.0f - pasoPerimetro); break;
             }
         }
     }

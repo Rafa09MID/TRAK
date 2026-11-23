@@ -91,6 +91,16 @@ class AlignRequest(BaseModel):
     gain: float = 0.6
     max_step: int = 9
 
+class NotifyPayload(BaseModel):
+    text: str = ""
+    beep: str = "none"
+
+def _notificar_esp32(text: str = "", beep: str = "none"):
+    try:
+        requests.post(f"{ESP32_URL}/api/notify", params={"text": text, "beep": beep}, timeout=1.5)
+    except Exception:
+        pass
+
 def decodificar_imagen(base64_str: str) -> np.ndarray:
     if "," in base64_str:
         base64_str = base64_str.split(",")[1]
@@ -286,8 +296,11 @@ def api_identify_and_point(payload: ImagePayload):
                     "box": [oy1, ox1, oy2, ox2]
                 })
 
+        objeto_nombre = parsed.get("objeto", "Objeto detectado")
+        _notificar_esp32(objeto_nombre, "detect")
+
         return {
-            "objeto": parsed.get("objeto", "Objeto detectado"),
+            "objeto": objeto_nombre,
             "descripcion": parsed.get("descripcion", ""),
             "target_x": target_x,
             "target_y": target_y,
@@ -351,6 +364,11 @@ def proxy_rect():
         return res.json()
     except Exception as e:
         return {"error": f"No se pudo comunicar con ESP32: {str(e)}"}
+
+@app.post("/api/esp32/notify")
+def proxy_notify(payload: NotifyPayload):
+    _notificar_esp32(payload.text, payload.beep)
+    return {"sent": True, "text": payload.text, "beep": payload.beep}
 
 @app.post("/api/save_safe_area")
 def save_safe_area(corners: SafeAreaCorners):
@@ -730,6 +748,7 @@ def api_command_point(req: CommandRequest):
         matches = [o for o in objetos if o["color"].lower() == target_color.lower()]
         if matches:
             top = matches[0]
+            _notificar_esp32(top["nombre"], "detect")
             pointed = False
             if cal.get("homography"):
                 point_camera_xy(PointCameraRequest(x=top["x"], y=top["y"]))
