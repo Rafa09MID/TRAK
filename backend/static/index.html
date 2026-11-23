@@ -399,7 +399,7 @@
                     <div class="segmented-control" style="transform: scale(0.88); transform-origin: right;">
                         <button class="seg-btn active" id="modeFullBtn" onclick="setAreaMode('full')">Camara</button>
                         <button class="seg-btn" id="modeManualBtn" onclick="setAreaMode('manual')">2 Esquinas</button>
-                        <button class="seg-btn" id="modeJoystickBtn" onclick="setAreaMode('joystick')">Joystick</button>
+                        <button class="seg-btn" id="modeJoystickBtn" onclick="setAreaMode('joystick')">Ejes</button>
                     </div>
                 </div>
                 <div class="status-line">
@@ -426,21 +426,30 @@
             </div>
 
             <div class="card" id="cornerConfirmCard" style="display:none; border-color: rgba(52, 199, 89, 0.4);">
-                <div class="id-header" style="margin-bottom: 8px;">
+                <div class="id-header" style="margin-bottom: 10px;">
                     <span class="id-title" style="color: var(--green);" id="confirmCornerTitle">Confirmar Esquina (-5, 5)</span>
                     <span class="id-model" id="confirmAnglesText">--° / --°</span>
                 </div>
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px;">
-                    <div id="miniJoyBase" style="position:relative; width:100px; height:100px; flex-shrink:0; border-radius:50%; background:var(--surface-secondary); border:1px solid var(--border); touch-action:none;">
-                        <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(0,0,0,0.08);"></div>
-                        <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(0,0,0,0.08);"></div>
-                        <div id="miniJoyThumb" style="position:absolute; left:50%; top:50%; width:36px; height:36px; border-radius:50%; background:var(--green); box-shadow:0 2px 8px rgba(52,199,89,0.4); transform:translate(-50%,-50%); pointer-events:none;"></div>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.76rem; font-weight:600; margin-bottom:4px;">
+                            <span>Eje 1 (Cabeceo)</span><span id="confValEje1">--°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(-1, 0)">-1°</button>
+                            <input type="range" id="confSliderEje1" min="0" max="180" value="115" style="flex:1; accent-color: var(--green);" oninput="moverDesdeBarra('conf', 1, this.value)">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(1, 0)">+1°</button>
+                        </div>
                     </div>
-                    <div class="action-grid" style="flex:1; grid-template-columns: 1fr 1fr; gap: 6px;">
-                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(1, 0)">Arriba 1°</button>
-                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(-1, 0)">Abajo 1°</button>
-                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(0, -1)">Izq 1°</button>
-                        <button class="btn" style="padding: 9px 4px; font-size: 0.74rem;" onclick="ajusteFinoEsquina(0, 1)">Der 1°</button>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.76rem; font-weight:600; margin-bottom:4px;">
+                            <span>Eje 2 (Rotacion)</span><span id="confValEje2">--°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(0, -1)">-1°</button>
+                            <input type="range" id="confSliderEje2" min="0" max="180" value="124" style="flex:1; accent-color: var(--green);" oninput="moverDesdeBarra('conf', 2, this.value)">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(0, 1)">+1°</button>
+                        </div>
                     </div>
                 </div>
                 <div class="action-grid" style="grid-template-columns: 1.4fr 1fr 0.7fr; gap: 8px;">
@@ -450,16 +459,33 @@
                 </div>
             </div>
 
-            <!-- MODO JOYSTICK MANUAL PARA CAPTURAR LAS 4 ESQUINAS -->
-            <div class="card" id="joystickCard" style="display:none; text-align:center;">
-                <div class="id-header" style="margin-bottom: 8px;">
+            <!-- MODO BARRAS EJE 1 Y EJE 2 PARA CAPTURAR LAS 4 ESQUINAS -->
+            <div class="card" id="joystickCard" style="display:none;">
+                <div class="id-header" style="margin-bottom: 10px;">
                     <span class="id-title" style="color: var(--blue);" id="joyCornerLabel">Esquina 1/4: (-5, 5)</span>
                     <span class="id-model" id="joyAnglesText">115° / 124°</span>
                 </div>
-                <div id="joyBase" style="position:relative; width:150px; height:150px; margin:6px auto 12px; border-radius:50%; background:var(--surface-secondary); border:1px solid var(--border); touch-action:none;">
-                    <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(0,0,0,0.07);"></div>
-                    <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(0,0,0,0.07);"></div>
-                    <div id="joyThumb" style="position:absolute; left:50%; top:50%; width:54px; height:54px; border-radius:50%; background:var(--blue); box-shadow:0 4px 12px rgba(0,122,255,0.35); transform:translate(-50%,-50%); pointer-events:none;"></div>
+                <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:600; margin-bottom:5px;">
+                            <span>Eje 1 (Cabeceo)</span><span id="joyValEje1">115°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(-1, 0)">-1°</button>
+                            <input type="range" id="joySliderEje1" min="0" max="180" value="115" style="flex:1; accent-color: var(--blue);" oninput="moverDesdeBarra('joy', 1, this.value)">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(1, 0)">+1°</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:600; margin-bottom:5px;">
+                            <span>Eje 2 (Rotacion)</span><span id="joyValEje2">124°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(0, -1)">-1°</button>
+                            <input type="range" id="joySliderEje2" min="0" max="180" value="124" style="flex:1; accent-color: var(--blue);" oninput="moverDesdeBarra('joy', 2, this.value)">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(0, 1)">+1°</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="action-grid">
                     <button class="btn btn-green" id="btnJoyCapture" onclick="capturarEsquinaJoystick()">Capturar (-5, 5)</button>
@@ -910,9 +936,45 @@
 
         let confirmResolver = null;
 
+        function sincronizarBarrasEjes() {
+            const angTxt = `${cabeceoActual}° / ${rotacionActual}°`;
+            const cS1 = document.getElementById('confSliderEje1');
+            const cS2 = document.getElementById('confSliderEje2');
+            const jS1 = document.getElementById('joySliderEje1');
+            const jS2 = document.getElementById('joySliderEje2');
+            if (cS1) { cS1.value = cabeceoActual; document.getElementById('confValEje1').innerText = cabeceoActual + '°'; }
+            if (cS2) { cS2.value = rotacionActual; document.getElementById('confValEje2').innerText = rotacionActual + '°'; }
+            if (jS1) { jS1.value = cabeceoActual; document.getElementById('joyValEje1').innerText = cabeceoActual + '°'; }
+            if (jS2) { jS2.value = rotacionActual; document.getElementById('joyValEje2').innerText = rotacionActual + '°'; }
+            document.getElementById('confirmAnglesText').innerText = angTxt;
+            document.getElementById('joyAnglesText').innerText = angTxt;
+        }
+
+        let barThrottle = 0;
+        function moverDesdeBarra(prefix, eje, valStr) {
+            const val = parseInt(valStr, 10);
+            if (eje === 1) cabeceoActual = val;
+            else rotacionActual = val;
+            sincronizarBarrasEjes();
+
+            const now = Date.now();
+            if (now - barThrottle < 55) return;
+            barThrottle = now;
+            fetch('/api/esp32/servo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
+            }).catch(() => {});
+        }
+
         async function ajusteFinoEsquina(dCab, dRot) {
-            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 250);
-            document.getElementById('confirmAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
+            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 120);
+            sincronizarBarrasEjes();
+        }
+
+        async function ajusteFinoManual(dCab, dRot) {
+            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 120);
+            sincronizarBarrasEjes();
         }
 
         function esperarConfirmacionUsuario(coordLabel) {
@@ -920,8 +982,8 @@
                 const card = document.getElementById('cornerConfirmCard');
                 card.style.display = 'block';
                 document.getElementById('confirmCornerTitle').innerText = `Confirmar Esquina ${coordLabel}`;
-                document.getElementById('confirmAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
                 document.getElementById('btnConfirmCorner').innerText = `Confirmar ${coordLabel}`;
+                sincronizarBarrasEjes();
 
                 confirmResolver = resolve;
                 document.getElementById('btnConfirmCorner').onclick = () => {
@@ -1563,73 +1625,13 @@
             if (!c) return;
             document.getElementById('joyCornerLabel').innerText = `Esquina ${joyStep + 1}/4: ${c.label}`;
             document.getElementById('btnJoyCapture').innerText = `Capturar ${c.label}`;
-            document.getElementById('joyAnglesText').innerText = `${cabeceoActual}° / ${rotacionActual}°`;
-            document.getElementById('stepBadge').innerText = `Joy ${joyStep + 1}/4`;
-            document.getElementById('instructionText').innerText = `Mueve el joystick hacia ${c.label} y pulsa Capturar.`;
-        }
-
-        function bindUltraLowJoystick(baseId, thumbId, thumbHalf) {
-            const base = document.getElementById(baseId);
-            const thumb = document.getElementById(thumbId);
-            if (!base || !thumb) return;
-            let active = false;
-            let localTimer = null;
-            let jx = 0, jy = 0;
-
-            function updateStick(e) {
-                const rect = base.getBoundingClientRect();
-                const cx = rect.left + rect.width / 2;
-                const cy = rect.top + rect.height / 2;
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-                let dx = clientX - cx;
-                let dy = clientY - cy;
-                const maxR = Math.max(10, rect.width / 2 - thumbHalf);
-                const dist = Math.hypot(dx, dy);
-                if (dist > maxR) {
-                    dx = (dx / dist) * maxR;
-                    dy = (dy / dist) * maxR;
-                }
-                thumb.style.left = (50 + (dx / rect.width) * 100) + '%';
-                thumb.style.top = (50 + (dy / rect.height) * 100) + '%';
-                jx = dx / maxR;
-                jy = dy / maxR;
-            }
-
-            function stopStick() {
-                active = false;
-                jx = 0; jy = 0;
-                thumb.style.left = '50%';
-                thumb.style.top = '50%';
-                if (localTimer) { clearInterval(localTimer); localTimer = null; }
-            }
-
-            base.addEventListener('pointerdown', (e) => {
-                active = true;
-                updateStick(e);
-                if (!localTimer) {
-                    // Sensibilidad muy baja: exactamente 1 grado cada 190ms
-                    localTimer = setInterval(async () => {
-                        if (!active) return;
-                        const dRot = Math.abs(jx) > 0.25 ? (jx > 0 ? 1 : -1) : 0;
-                        const dCab = Math.abs(jy) > 0.25 ? (jy < 0 ? 1 : -1) : 0;
-                        if (dRot !== 0 || dCab !== 0) {
-                            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 10);
-                            const angTxt = `${cabeceoActual}° / ${rotacionActual}°`;
-                            document.getElementById('joyAnglesText').innerText = angTxt;
-                            document.getElementById('confirmAnglesText').innerText = angTxt;
-                        }
-                    }, 190);
-                }
-            });
-            window.addEventListener('pointermove', (e) => { if (active) updateStick(e); });
-            window.addEventListener('pointerup', stopStick);
+            sincronizarBarrasEjes();
+            document.getElementById('stepBadge').innerText = `Ejes ${joyStep + 1}/4`;
+            document.getElementById('instructionText').innerText = `Ajusta Eje 1 y Eje 2 hacia ${c.label} y pulsa Capturar.`;
         }
 
         function initJoystick() {
-            bindUltraLowJoystick('joyBase', 'joyThumb', 27);
-            bindUltraLowJoystick('miniJoyBase', 'miniJoyThumb', 18);
+            sincronizarBarrasEjes();
         }
 
         async function capturarEsquinaJoystick() {
