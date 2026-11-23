@@ -21,7 +21,25 @@ env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"
 load_dotenv(dotenv_path=env_path)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-ESP32_URL = os.getenv("ESP32_URL", "http://192.168.68.107")
+ESP32_URL = os.getenv("ESP32_URL", "http://192.168.68.103")
+
+def auto_detect_esp32():
+    """Busca automaticamente el ESP32 en la red actual (Casa, mDNS o AP Escuela 192.168.4.1)."""
+    global ESP32_URL
+    candidates = [ESP32_URL, "http://esp32-laser.local", "http://192.168.4.1"]
+    seen = set()
+    for url in candidates:
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        try:
+            r = requests.get(f"{url}/api/status", timeout=1.2)
+            if r.status_code == 200:
+                ESP32_URL = url
+                return url
+        except Exception:
+            continue
+    return ESP32_URL
 
 # Inicializar cliente oficial de Gemini
 ai_client = None
@@ -766,13 +784,29 @@ def api_command_point(req: CommandRequest):
     return api_identify_and_point(ImagePayload(image_base64=req.image_base64))
 
 if __name__ == "__main__":
+    import socket
     import uvicorn
     cert_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cert.pem")
     key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "key.pem")
 
+    esp_found = auto_detect_esp32()
+    ips = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except Exception:
+        pass
+
     print(f"\n=========================================================")
-    print(f"  SERVIDOR TRAK INICIADO EN HTTPS")
-    print(f"  Abre en tu CELULAR: https://192.168.68.108:8443")
+    print(f"  SERVIDOR TRAK INICIADO EN HTTPS (PUERTO 8443)")
+    print(f"  ESP32 detectado en: {esp_found}")
+    if ips:
+        for ip in ips:
+            print(f"  Abre en tu CELULAR: https://{ip}:8443")
+    else:
+        print(f"  Abre en tu CELULAR: https://192.168.68.107:8443")
     print(f"=========================================================\n")
 
     uvicorn.run(
