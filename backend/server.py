@@ -66,6 +66,18 @@ class SafeAreaCorners(BaseModel):
     cBL: int
     rBL: int
 
+class HomographyPayload(BaseModel):
+    cam_corners: list  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]] normalizado 0..1
+    servo_corners: SafeAreaCorners
+
+class PointCameraRequest(BaseModel):
+    x: float
+    y: float
+
+class CommandRequest(BaseModel):
+    image_base64: str
+    command: str
+
 class AlignRequest(BaseModel):
     image_base64: str
     target_x: float  # 0.0 a 1.0 (pantalla del celular)
@@ -452,6 +464,288 @@ def align_step(req: AlignRequest):
         "nueva_rotacion": nueva_rotacion,
         "alineado": False
     }
+
+# =====================================================================
+# VISIÓN LOCAL OPENCV + CIELAB (BOLITAS DE PAPEL Y COLORES) + HOMOGRAFÍA
+# =====================================================================
+
+def _cal_file_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "safe_area.json")
+
+def _cargar_calibracion():
+    p = _cal_file_path()
+    if os.path.exists(p):
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def clasificar_color_lab(L, A, B, H, S, V):
+    """
+    Clasificación de color en espacio CIELAB + HSV robusta ante cambios de iluminación.
+    Distingue tonos blancos, verde pastel, verde intenso, amarillo, azul, rosa/rojo.
+    """
+    chroma = ((A - 128.0)**2 + (B - 128.0)**2)**0.5
+
+    # Blanco: alta luminancia y baja cromaticidad
+    if L > 145 and chroma < 18 and S < 65:
+        return "Blanco"
+
+    # Verde pastel: componente verde en LAB (A < 122) o Hue verde con saturación suave y brillo alto
+    if (A < 122 and L > 110 and S < 155) or (34 <= H <= 92 and 25 <= S <= 145 and V > 115):
+        return "Verde pastel"
+
+    # Verde intenso
+    if A < 115 or (35 <= H <= 90 and S > 145):
+        return "Verde"
+
+    # Amarillo
+    if B > 142 and 112 <= A <= 142:
+        return "Amarillo"
+
+    # Azul
+    if B < 114 and A < 140:
+        return "Azul"
+
+    # Rosa / Rojo
+    if A > 140:
+        return "Rosa" if L > 135 and S < 160 else "Rojo"
+
+    if L > 125 and chroma < 15:
+        return "Blanco"
+
+    return "Otro"
+
+def detectar_objetos_locales(img_bgr: np.ndarray, cam_corners=None):
+    """
+    Detecta objetos / bolitas de papel en <15ms usando OpenCV + CIELAB,
+    excluye el punto láser y clasifica el color de cada objeto.
+    """
+    h, w = img_bgr.shape[:2]
+    lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+
+    # Máscara de objetos claros o coloridos sobre el fondo oscuro/neutro
+    blur_l = cv2.GaussianBlur(l_ch, (5, 5), 0)
+    _, thresh_l = cv2.threshold(blur_l, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # También incluir objetos coloridos por cromaticidad LAB
+    chroma = np.sqrt((a_ch.astype(np.float32) - 128)**2 + (b_ch.astype(np.float32) - 128)**2)
+    mask_chroma = (chroma > 16).astype(np.uint8) * 255
+    mask = cv2.bitwise_or(thresh_l, mask_chroma)
+
+    # Si tenemos polígono del Área Segura en cámara, restringir búsqueda dentro de él
+    if cam_corners and len(cam_corners) == 4:
+        poly_mask = np.zeros((h, w), dtype=np.uint8)
+        pts = np.array([[int(p[0]*w), int(p[1]*h)] for p in cam_corners], dtype=np.int32)
+        cv2.fillPoly(poly_mask, [pts], 255)
+        mask = cv2.bitwise_and(mask, poly_mask)
+
+    # Limpiar ruido morfológico
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    # Excluir la ubicación actual del punto láser para no confundirlo con una bolita
+    lx, ly, laser_ok, lr = detectar_laser_opencv(img_bgr)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    objetos = []
+    idx = 1
+
+    for c in contours:
+        area = cv2.contourArea(c)
+        if area < 120 or area > (h * w * 0.45):
+            continue
+
+        x, y, bw, bh = cv2.boundingRect(c)
+        cx = (x + bw / 2.0) / w
+        cy = (y + bh / 2.0) / h
+
+        # Ignorar si coincide exactamente con el punto láser y es muy pequeño
+        if laser_ok and ((cx - lx)**2 + (cy - ly)**2)**0.5 < 0.03 and area < 600:
+            continue
+
+        obj_mask = np.zeros((h, w), dtype=np.uint8)
+        cv2.drawContours(obj_mask, [c], -1, 255, -1)
+
+        L_med = float(np.median(l_ch[obj_mask == 255]))
+        A_med = float(np.median(a_ch[obj_mask == 255]))
+        B_med = float(np.median(b_ch[obj_mask == 255]))
+        H_med = float(np.median(hsv[:, :, 0][obj_mask == 255]))
+        S_med = float(np.median(hsv[:, :, 1][obj_mask == 255]))
+        V_med = float(np.median(hsv[:, :, 2][obj_mask == 255]))
+
+        color_nombre = clasificar_color_lab(L_med, A_med, B_med, H_med, S_med, V_med)
+        (_, _), radius = cv2.minEnclosingCircle(c)
+
+        objetos.append({
+            "id": idx,
+            "color": color_nombre,
+            "nombre": f"Objeto {color_nombre}",
+            "x": round(cx, 4),
+            "y": round(cy, 4),
+            "box": [round(y/h, 4), round(x/w, 4), round((y+bh)/h, 4), round((x+bw)/w, 4)],
+            "radius": round(float(radius), 1),
+            "area": int(area)
+        })
+        idx += 1
+
+    # Ordenar por área descendente
+    objetos.sort(key=lambda o: o["area"], reverse=True)
+    return objetos
+
+@app.post("/api/calibrate_homography")
+def calibrate_homography(payload: HomographyPayload):
+    """
+    Calcula y guarda la matriz Homografía 3x3 entre Cámara (x,y) y Área Segura (u,v)
+    junto con los ángulos calibrados del ESP32.
+    """
+    if len(payload.cam_corners) != 4:
+        return JSONResponse(status_code=400, content={"error": "Se requieren 4 esquinas de cámara."})
+
+    src = np.array(payload.cam_corners, dtype=np.float32)
+    dst = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], dtype=np.float32)
+    H, _ = cv2.findHomography(src, dst)
+
+    data = payload.servo_corners.model_dump()
+    data["cam_corners"] = payload.cam_corners
+    data["homography"] = H.tolist() if H is not None else None
+
+    with open(_cal_file_path(), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    try:
+        url = (
+            f"{ESP32_URL}/api/safe_area?"
+            f"cTL={data['cTL']}&rTL={data['rTL']}&"
+            f"cTR={data['cTR']}&rTR={data['rTR']}&"
+            f"cBR={data['cBR']}&rBR={data['rBR']}&"
+            f"cBL={data['cBL']}&rBL={data['rBL']}"
+        )
+        requests.post(url, timeout=3)
+    except:
+        pass
+
+    return {"saved": True, "homography_ready": H is not None}
+
+@app.post("/api/verify_calibration")
+def verify_calibration(payload: ImagePayload):
+    """
+    Verifica si el láser físico coincide con el centro esperado (0.5, 0.5)
+    usando la Homografía calibrada.
+    """
+    cal = _cargar_calibracion()
+    H_list = cal.get("homography")
+    if not H_list:
+        return {"verified": False, "error": "No hay homografía guardada."}
+
+    img = decodificar_imagen(payload.image_base64)
+    lx, ly, detected, _ = detectar_laser_opencv(img)
+    if not detected:
+        return {"verified": False, "error": "Láser no visible durante verificación."}
+
+    H = np.array(H_list, dtype=np.float32)
+    pt = np.array([[[lx, ly]]], dtype=np.float32)
+    uv = cv2.perspectiveTransform(pt, H)[0][0]
+    u_meas, v_meas = float(uv[0]), float(uv[1])
+    err = ((u_meas - 0.5)**2 + (v_meas - 0.5)**2)**0.5
+
+    return {
+        "verified": err < 0.08,
+        "error_pct": round(err * 100, 1),
+        "u_meas": round(u_meas, 3),
+        "v_meas": round(v_meas, 3),
+        "laser_cam": [lx, ly]
+    }
+
+@app.post("/api/point_camera_xy")
+def point_camera_xy(req: PointCameraRequest):
+    """
+    Apunta el láser físicamente en 1 solo paso a cualquier coordenada (x, y) de la cámara
+    usando la Homografía 3x3 calibrada.
+    """
+    cal = _cargar_calibracion()
+    H_list = cal.get("homography")
+    if not H_list:
+        return JSONResponse(status_code=400, content={"error": "Calibra el Área Segura primero para apuntar directo por homografía."})
+
+    H = np.array(H_list, dtype=np.float32)
+    pt = np.array([[[req.x, req.y]]], dtype=np.float32)
+    uv = cv2.perspectiveTransform(pt, H)[0][0]
+    u = max(0.0, min(1.0, float(uv[0])))
+    v = max(0.0, min(1.0, float(uv[1])))
+
+    try:
+        res = requests.post(f"{ESP32_URL}/api/move_norm?u={u:.3f}&v={v:.3f}", timeout=2)
+        return {"pointed": True, "u": round(u, 3), "v": round(v, 3), "esp32": res.json()}
+    except Exception as e:
+        return {"pointed": False, "error": str(e)}
+
+@app.post("/api/detect_objects_local")
+def api_detect_objects_local(payload: ImagePayload):
+    """
+    Endpoint rápido (<15ms) de visión local OpenCV + CIELAB para detectar bolitas y colores.
+    """
+    t0 = time.time()
+    cal = _cargar_calibracion()
+    img = decodificar_imagen(payload.image_base64)
+    objetos = detectar_objetos_locales(img, cal.get("cam_corners"))
+    return {
+        "count": len(objetos),
+        "objects": objetos,
+        "ms": round((time.time() - t0) * 1000, 1)
+    }
+
+@app.post("/api/command_point")
+def api_command_point(req: CommandRequest):
+    """
+    Interpreta un comando (ej. 'verde pastel', 'blancas', o lenguaje natural),
+    busca localmente con OpenCV CIELAB y apunta con homografía o consulta a Gemini si es complejo.
+    """
+    cmd = req.command.lower().strip()
+    cal = _cargar_calibracion()
+    img = decodificar_imagen(req.image_base64)
+    objetos = detectar_objetos_locales(img, cal.get("cam_corners"))
+
+    color_map = [
+        ("verde pastel", "Verde pastel"),
+        ("pastel", "Verde pastel"),
+        ("blanca", "Blanco"),
+        ("blanco", "Blanco"),
+        ("verde", "Verde"),
+        ("amarill", "Amarillo"),
+        ("azul", "Azul"),
+        ("rosa", "Rosa"),
+        ("rojo", "Rojo"),
+        ("roja", "Rojo"),
+    ]
+
+    target_color = None
+    for kw, col in color_map:
+        if kw in cmd:
+            target_color = col
+            break
+
+    if target_color:
+        matches = [o for o in objetos if o["color"].lower() == target_color.lower()]
+        if matches:
+            top = matches[0]
+            pointed = False
+            if cal.get("homography"):
+                point_camera_xy(PointCameraRequest(x=top["x"], y=top["y"]))
+                pointed = True
+            return {
+                "source": "opencv_local",
+                "matched_color": target_color,
+                "count": len(matches),
+                "target": top,
+                "all_matches": matches,
+                "pointed_directly": pointed
+            }
+
+    # Si no es un filtro de color local o no encontró coincidencia, usar Gemini
+    return api_identify_and_point(ImagePayload(image_base64=req.image_base64))
 
 if __name__ == "__main__":
     import uvicorn

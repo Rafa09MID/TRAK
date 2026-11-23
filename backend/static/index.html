@@ -242,6 +242,47 @@
             cursor: pointer;
         }
 
+        .filter-bar {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+        }
+        .filter-bar::-webkit-scrollbar { display: none; }
+        .filter-pill {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 13px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .filter-pill.active {
+            background: var(--text);
+            color: #fff;
+            border-color: var(--text);
+        }
+        .cmd-row {
+            display: flex;
+            gap: 8px;
+        }
+        .cmd-input {
+            flex: 1;
+            padding: 11px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.84rem;
+            outline: none;
+        }
+        .cmd-input:focus { border-color: var(--blue); }
+
         /* VISTA ÁREA SEGURA */
         #viewControl { display: none; flex-direction: column; gap: 12px; }
         .metrics-row {
@@ -347,10 +388,8 @@
                     <div class="pill" id="cornerCountPill">Esquinas: 0 / 2</div>
                 </div>
 
-                <div class="lens-bar">
-                    <button class="btn-zoom" id="btnZoom05" onclick="setZoomMode(0.5)">0.5x</button>
-                    <button class="btn-zoom active" id="btnZoom1" onclick="setZoomMode(1.0)">1x</button>
-                    <button class="btn-zoom" onclick="siguienteCamara()">Lente</button>
+                <div class="lens-bar" id="lensBar">
+                    <button class="btn-zoom active" id="btnZoom1" onclick="seleccionarLente(0)">Cam 1</button>
                 </div>
             </div>
 
@@ -361,8 +400,23 @@
                 </div>
             </div>
 
+            <div class="filter-bar">
+                <button class="filter-pill" onclick="buscarColorLocal('Todas')">Detectar Todo</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Blanco')">Blancas</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Verde pastel')">Verde Pastel</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Amarillo')">Amarillas</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Azul')">Azules</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Rojo')">Rojas</button>
+            </div>
+
+            <div class="cmd-row">
+                <input type="text" id="cmdInput" class="cmd-input" placeholder="Ej: señala verde pastel...">
+                <button class="btn" onclick="iniciarVoz()" id="btnVoz">Voz</button>
+                <button class="btn btn-blue" onclick="enviarComando()">Ir</button>
+            </div>
+
             <div class="action-grid">
-                <button class="btn btn-indigo btn-full" id="btnIdentify" onclick="identificarYSenalar()">Identificar y Señalar con Laser</button>
+                <button class="btn btn-indigo btn-full" id="btnIdentify" onclick="identificarYSenalar()">Identificar con IA</button>
                 <button class="btn btn-blue" id="btnAutoCalibrar" onclick="autoCalibrar()">Auto-Calibrar</button>
                 <button class="btn" onclick="centrarAreaSegura()">Centro</button>
                 <button class="btn btn-red on" id="btnLaserToggle" onclick="toggleLaser()">Laser: ON</button>
@@ -449,7 +503,13 @@
                 );
                 if (rearDevices.length > 0) videoDevices = rearDevices;
 
-                await startCameraStream(0);
+                const savedId = localStorage.getItem('trak_lens_id');
+                let startIdx = videoDevices.findIndex(d => d.deviceId === savedId);
+                if (startIdx === -1) startIdx = 0;
+
+                construirBotonesLente();
+                await seleccionarLente(startIdx);
+
                 video.onloadedmetadata = () => {
                     ajustarCanvas();
                     requestAnimationFrame(renderLoop);
@@ -458,6 +518,34 @@
             } catch (err) {
                 console.error("Error camara:", err);
             }
+        }
+
+        function construirBotonesLente() {
+            const bar = document.getElementById('lensBar');
+            bar.innerHTML = "";
+            if (videoDevices.length === 0) {
+                bar.innerHTML = '<button class="btn-zoom active">Cam 1</button>';
+                return;
+            }
+            videoDevices.forEach((d, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-zoom' + (idx === currentDeviceIndex ? ' active' : '');
+                btn.id = `lensBtn_${idx}`;
+                btn.innerText = `Cam ${idx + 1}`;
+                btn.onclick = () => seleccionarLente(idx);
+                bar.appendChild(btn);
+            });
+        }
+
+        async function seleccionarLente(idx) {
+            currentDeviceIndex = idx;
+            document.querySelectorAll('#lensBar .btn-zoom').forEach((b, i) => {
+                b.classList.toggle('active', i === idx);
+            });
+            if (videoDevices[idx]) {
+                localStorage.setItem('trak_lens_id', videoDevices[idx].deviceId);
+            }
+            await startCameraStream(idx);
         }
 
         async function startCameraStream(deviceIndex) {
@@ -472,38 +560,6 @@
             video.srcObject = stream;
             currentTrack = stream.getVideoTracks()[0];
             ajustarCanvas();
-        }
-
-        async function setZoomMode(factor) {
-            document.getElementById('btnZoom05').classList.toggle('active', factor === 0.5);
-            document.getElementById('btnZoom1').classList.toggle('active', factor === 1.0);
-            if (!currentTrack) return;
-            const caps = currentTrack.getCapabilities ? currentTrack.getCapabilities() : {};
-            if (caps.zoom) {
-                try {
-                    await currentTrack.applyConstraints({ advanced: [{ zoom: factor === 0.5 ? caps.zoom.min : 1.0 }] });
-                    return;
-                } catch (e) {}
-            }
-            if (factor === 0.5 && videoDevices.length > 1) {
-                let idx = videoDevices.findIndex(d =>
-                    d.label.toLowerCase().includes('ultra') || d.label.toLowerCase().includes('wide') || d.label.toLowerCase().includes('0.5')
-                );
-                if (idx === -1) idx = (currentDeviceIndex + 1) % videoDevices.length;
-                if (idx !== currentDeviceIndex) {
-                    currentDeviceIndex = idx;
-                    await startCameraStream(idx);
-                }
-            } else if (factor === 1.0 && videoDevices.length > 0) {
-                currentDeviceIndex = 0;
-                await startCameraStream(0);
-            }
-        }
-
-        async function siguienteCamara() {
-            if (videoDevices.length <= 1) return;
-            currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
-            await startCameraStream(currentDeviceIndex);
         }
 
         function ajustarCanvas() {
@@ -728,12 +784,14 @@
                 { key: "BL", name: "Inferior Izquierda", pt: rectArea.BL }
             ];
             const cal = {};
+            const camCorners = [];
 
             for (let i = 0; i < targets.length; i++) {
                 const t = targets[i];
                 document.getElementById('stepBadge').innerText = `${i+1} / 4`;
                 document.getElementById('instructionText').innerText = `Alineando: ${t.name}`;
 
+                let lastLx = t.pt.x, lastLy = t.pt.y;
                 for (let step = 0; step < 8; step++) {
                     const res = await fetch('/api/align_step', {
                         method: 'POST',
@@ -748,6 +806,7 @@
                         })
                     });
                     const d = await res.json();
+                    if (d.laser_x !== undefined) { lastLx = d.laser_x; lastLy = d.laser_y; }
                     if (d.nuevo_cabeceo !== undefined) {
                         cabeceoActual = d.nuevo_cabeceo;
                         rotacionActual = d.nueva_rotacion;
@@ -757,17 +816,33 @@
                 }
                 cal[`c${t.key}`] = cabeceoActual;
                 cal[`r${t.key}`] = rotacionActual;
+                camCorners.push([lastLx, lastLy]);
             }
 
-            await fetch('/api/save_safe_area', {
+            document.getElementById('stepBadge').innerText = "Verificando";
+            document.getElementById('instructionText').innerText = "Calculando Homografia 3x3 y verificando centro...";
+
+            await fetch('/api/calibrate_homography', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(cal)
+                body: JSON.stringify({ cam_corners: camCorners, servo_corners: cal })
             });
 
+            await fetch('/api/esp32/center', { method: 'POST' });
+            await new Promise(r => setTimeout(r, 450));
+
+            const verRes = await fetch('/api/verify_calibration', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_base64: capturarFrameBase64(480) })
+            });
+            const ver = await verRes.json();
+
             calibrando = false;
-            document.getElementById('stepBadge').innerText = "Listo";
-            document.getElementById('instructionText').innerText = "Area Segura calibrada y guardada.";
+            document.getElementById('stepBadge').innerText = ver.verified ? "Verificado" : "Listo";
+            document.getElementById('instructionText').innerText = ver.verified
+                ? `Area Segura verificada (error ${ver.error_pct}%).`
+                : "Area Segura calibrada y guardada.";
             cambiarVista('control');
         }
 
@@ -875,13 +950,151 @@
                     });
                 }
 
-                await apuntarAObjetivo(d.target_x, d.target_y, d.objeto);
+                await apuntarDirectoOHibrido(d.target_x, d.target_y, d.objeto);
             } catch (e) {
                 alert("Error de conexion: " + e.message);
             } finally {
                 btn.disabled = false;
-                btn.innerText = "Identificar y Señalar con Laser";
+                btn.innerText = "Identificar con IA";
             }
+        }
+
+        async function apuntarDirectoOHibrido(x, y, label) {
+            try {
+                const res = await fetch('/api/point_camera_xy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x, y })
+                });
+                if (res.ok) {
+                    const d = await res.json();
+                    if (d.pointed) {
+                        document.getElementById('stepBadge').innerText = "Señalado";
+                        document.getElementById('instructionText').innerText = `Laser apuntando a: ${label} (Homografia)`;
+                        return;
+                    }
+                }
+            } catch (e) {}
+            await apuntarAObjetivo(x, y, label);
+        }
+
+        async function buscarColorLocal(colorFiltro) {
+            document.querySelectorAll('.filter-pill').forEach(p => {
+                p.classList.toggle('active', p.innerText.toLowerCase().includes(colorFiltro.toLowerCase()) || (colorFiltro === 'Todas' && p.innerText === 'Detectar Todo'));
+            });
+            document.getElementById('stepBadge').innerText = "OpenCV";
+            document.getElementById('instructionText').innerText = `Buscando (${colorFiltro}) localmente...`;
+
+            try {
+                const res = await fetch('/api/detect_objects_local', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(480) })
+                });
+                const d = await res.json();
+                let lista = d.objects || [];
+                if (colorFiltro !== 'Todas') {
+                    lista = lista.filter(o => o.color.toLowerCase() === colorFiltro.toLowerCase());
+                }
+
+                const card = document.getElementById('identifyCard');
+                card.style.display = 'block';
+                document.getElementById('identifyModel').innerText = `OpenCV CIELAB (${d.ms} ms)`;
+                const chips = document.getElementById('otherChips');
+                chips.innerHTML = "";
+
+                if (lista.length === 0) {
+                    detectedObject = null;
+                    document.getElementById('identifyTitle').innerText = `Sin coincidencias (${colorFiltro})`;
+                    document.getElementById('identifyDesc').innerText = `Objetos totales visibles: ${d.count}.`;
+                    document.getElementById('stepBadge').innerText = "0";
+                    document.getElementById('instructionText').innerText = `No se encontraron objetos ${colorFiltro}.`;
+                    return;
+                }
+
+                const top = lista[0];
+                detectedObject = { objeto: top.nombre, target_x: top.x, target_y: top.y, box: top.box };
+                document.getElementById('identifyTitle').innerText = `${top.nombre} (${lista.length} encontrados)`;
+                document.getElementById('identifyDesc').innerText = `Detectado localmente en ${d.ms} ms. Toca cualquier etiqueta para señalar:`;
+
+                lista.slice(0, 6).forEach((o, idx) => {
+                    const btnChip = document.createElement('button');
+                    btnChip.className = 'obj-chip';
+                    btnChip.innerText = `${o.color} #${idx + 1}`;
+                    btnChip.onclick = () => {
+                        detectedObject = { objeto: o.nombre, target_x: o.x, target_y: o.y, box: o.box };
+                        document.getElementById('identifyTitle').innerText = `${o.nombre} (#${idx + 1})`;
+                        apuntarDirectoOHibrido(o.x, o.y, `${o.color} #${idx + 1}`);
+                    };
+                    chips.appendChild(btnChip);
+                });
+
+                await apuntarDirectoOHibrido(top.x, top.y, top.nombre);
+            } catch (e) {
+                alert("Error deteccion local: " + e.message);
+            }
+        }
+
+        async function enviarComando() {
+            const input = document.getElementById('cmdInput');
+            const cmd = input.value.trim();
+            if (!cmd) return;
+
+            document.getElementById('stepBadge').innerText = "Comando";
+            document.getElementById('instructionText').innerText = `Procesando: "${cmd}"...`;
+
+            try {
+                const res = await fetch('/api/command_point', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(640), command: cmd })
+                });
+                const d = await res.json();
+                const card = document.getElementById('identifyCard');
+                card.style.display = 'block';
+
+                if (d.source === 'opencv_local' && d.target) {
+                    const t = d.target;
+                    detectedObject = { objeto: t.nombre, target_x: t.x, target_y: t.y, box: t.box };
+                    document.getElementById('identifyTitle').innerText = `${t.nombre} (${d.count} coincidencias)`;
+                    document.getElementById('identifyModel').innerText = "OpenCV CIELAB";
+                    document.getElementById('identifyDesc').innerText = `Comando ejecutado localmente para "${cmd}".`;
+                    if (!d.pointed_directly) await apuntarAObjetivo(t.x, t.y, t.nombre);
+                    else {
+                        document.getElementById('stepBadge').innerText = "Señalado";
+                        document.getElementById('instructionText').innerText = `Laser apuntando a: ${t.nombre}`;
+                    }
+                } else if (d.objeto) {
+                    detectedObject = { objeto: d.objeto, target_x: d.target_x, target_y: d.target_y, box: d.box };
+                    document.getElementById('identifyTitle').innerText = d.objeto;
+                    document.getElementById('identifyModel').innerText = d.model || "Gemini";
+                    document.getElementById('identifyDesc').innerText = d.descripcion || "";
+                    await apuntarDirectoOHibrido(d.target_x, d.target_y, d.objeto);
+                }
+            } catch (e) {
+                alert("Error comando: " + e.message);
+            }
+        }
+
+        function iniciarVoz() {
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRec) {
+                alert("Tu navegador no soporta reconocimiento de voz.");
+                return;
+            }
+            const rec = new SpeechRec();
+            rec.lang = 'es-MX';
+            const btn = document.getElementById('btnVoz');
+            btn.innerText = "Escuchando...";
+            rec.onresult = (event) => {
+                const txt = event.results[0][0].transcript;
+                document.getElementById('cmdInput').value = txt;
+                btn.innerText = "Voz";
+                enviarComando();
+            };
+            rec.onerror = () => { btn.innerText = "Voz"; };
+            rec.onend = () => { btn.innerText = "Voz"; };
+            rec.start();
         }
 
         // CONTROL DEL CUADRADO DE ÁREA SEGURA
