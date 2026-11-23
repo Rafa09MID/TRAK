@@ -394,9 +394,16 @@
             </div>
 
             <div class="card">
+                <div class="status-line" style="justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Modo Area Segura</span>
+                    <div class="segmented-control" style="transform: scale(0.92); transform-origin: right;">
+                        <button class="seg-btn active" id="modeFullBtn" onclick="setAreaMode('full')">Toda la Camara</button>
+                        <button class="seg-btn" id="modeManualBtn" onclick="setAreaMode('manual')">2 Esquinas</button>
+                    </div>
+                </div>
                 <div class="status-line">
-                    <span class="step-badge" id="stepBadge">Paso 1</span>
-                    <span id="instructionText">Toca 2 esquinas opuestas para marcar el Area Segura.</span>
+                    <span class="step-badge" id="stepBadge">Listo</span>
+                    <span id="instructionText">Usando las 4 esquinas de la camara. Pulsa Auto-Calibrar.</span>
                 </div>
             </div>
 
@@ -469,6 +476,8 @@
         const ctx = canvas.getContext('2d');
 
         let esquinas = [];
+        let areaMode = 'full'; // 'full' = 4 esquinas de la camara, 'manual' = 2 esquinas tocadas
+        let calibratedPolygon = null;
         let laserPos = { x: 0.5, y: 0.5, detected: false };
         let cabeceoActual = 115;
         let rotacionActual = 124;
@@ -570,6 +579,7 @@
 
         canvas.addEventListener('click', (e) => {
             if (calibrando) return;
+            if (areaMode === 'full') setAreaMode('manual');
             if (esquinas.length >= 2) esquinas = [];
             const rect = canvas.getBoundingClientRect();
             esquinas.push({
@@ -579,7 +589,20 @@
             actualizarUIEsquinas();
         });
 
+        function setAreaMode(mode) {
+            areaMode = mode;
+            document.getElementById('modeFullBtn').classList.toggle('active', mode === 'full');
+            document.getElementById('modeManualBtn').classList.toggle('active', mode === 'manual');
+            actualizarUIEsquinas();
+        }
+
         function actualizarUIEsquinas() {
+            if (areaMode === 'full') {
+                document.getElementById('cornerCountPill').innerText = "4 Esquinas Camara";
+                document.getElementById('stepBadge').innerText = "Listo";
+                document.getElementById('instructionText').innerText = "Usando las 4 esquinas de la camara. Pulsa Auto-Calibrar.";
+                return;
+            }
             document.getElementById('cornerCountPill').innerText = `Esquinas: ${esquinas.length} / 2`;
             if (esquinas.length === 0) {
                 document.getElementById('stepBadge').innerText = "Paso 1";
@@ -595,12 +618,22 @@
 
         function limpiarEsquinas() {
             esquinas = [];
+            calibratedPolygon = null;
             detectedObject = null;
             document.getElementById('identifyCard').style.display = 'none';
             actualizarUIEsquinas();
         }
 
-        function obtenerRectanguloDe2Esquinas() {
+        function obtenerRectanguloObjetivo() {
+            if (areaMode === 'full') {
+                return {
+                    TL: { x: 0.08, y: 0.08 },
+                    TR: { x: 0.92, y: 0.08 },
+                    BR: { x: 0.92, y: 0.92 },
+                    BL: { x: 0.08, y: 0.92 },
+                    center: { x: 0.5, y: 0.5 }
+                };
+            }
             if (esquinas.length < 2) return null;
             const xMin = Math.min(esquinas[0].x, esquinas[1].x);
             const xMax = Math.max(esquinas[0].x, esquinas[1].x);
@@ -625,7 +658,7 @@
         }
 
         async function detectarLaserFrame() {
-            if (video.videoWidth === 0 || video.clientWidth === 0 || calibrando) return;
+            if (video.videoWidth === 0 || video.clientWidth === 0) return;
             try {
                 const res = await fetch('/api/detect_laser', {
                     method: 'POST',
@@ -650,18 +683,34 @@
         function renderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const rectArea = obtenerRectanguloDe2Esquinas();
-            if (rectArea) {
-                const x1 = rectArea.TL.x * canvas.width;
-                const y1 = rectArea.TL.y * canvas.height;
-                const w = (rectArea.TR.x - rectArea.TL.x) * canvas.width;
-                const h = (rectArea.BL.y - rectArea.TL.y) * canvas.height;
-
-                ctx.fillStyle = "rgba(52, 199, 89, 0.18)";
-                ctx.fillRect(x1, y1, w, h);
+            if (calibratedPolygon && calibratedPolygon.length === 4) {
+                ctx.beginPath();
+                ctx.moveTo(calibratedPolygon[0][0] * canvas.width, calibratedPolygon[0][1] * canvas.height);
+                for (let i = 1; i < 4; i++) {
+                    ctx.lineTo(calibratedPolygon[i][0] * canvas.width, calibratedPolygon[i][1] * canvas.height);
+                }
+                ctx.closePath();
+                ctx.fillStyle = "rgba(52, 199, 89, 0.16)";
+                ctx.fill();
                 ctx.strokeStyle = "#34C759";
                 ctx.lineWidth = 2.5;
-                ctx.strokeRect(x1, y1, w, h);
+                ctx.stroke();
+            } else {
+                const rectArea = obtenerRectanguloObjetivo();
+                if (rectArea) {
+                    const x1 = rectArea.TL.x * canvas.width;
+                    const y1 = rectArea.TL.y * canvas.height;
+                    const w = (rectArea.TR.x - rectArea.TL.x) * canvas.width;
+                    const h = (rectArea.BL.y - rectArea.TL.y) * canvas.height;
+
+                    ctx.fillStyle = "rgba(52, 199, 89, 0.14)";
+                    ctx.fillRect(x1, y1, w, h);
+                    ctx.strokeStyle = "#34C759";
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash(areaMode === 'full' ? [6, 4] : []);
+                    ctx.strokeRect(x1, y1, w, h);
+                    ctx.setLineDash([]);
+                }
             }
 
             esquinas.forEach((pt, idx) => {
@@ -728,30 +777,40 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image_base64: capturarFrameBase64(480) })
             });
-            return await res.json();
+            const data = await res.json();
+            laserPos.detected = data.detected;
+            if (data.detected) {
+                laserPos.x = data.x;
+                laserPos.y = data.y;
+            }
+            return data;
         }
 
-        async function moverServos(cab, rot) {
-            cabeceoActual = cab;
-            rotacionActual = rot;
+        async function moverServos(cab, rot, waitMs = 580) {
+            cabeceoActual = Math.max(0, Math.min(180, Math.round(cab)));
+            rotacionActual = Math.max(0, Math.min(180, Math.round(rot)));
             await fetch('/api/esp32/servo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cabeceo: cab, rotacion: rot })
+                body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
             });
-            await new Promise(r => setTimeout(r, 380));
+            await new Promise(r => setTimeout(r, waitMs));
         }
 
         async function autoCalibrar() {
-            const rectArea = obtenerRectanguloDe2Esquinas();
+            const rectArea = obtenerRectanguloObjetivo();
             if (!rectArea) {
-                alert("Toca 2 esquinas opuestas en la camara primero.");
+                alert("Toca 2 esquinas opuestas en la camara primero o selecciona Toda la Camara.");
                 return;
             }
 
             calibrando = true;
+            calibratedPolygon = null;
+            jacobianMatrix = null;
+            localStorage.removeItem('trak_jacobian');
+
             document.getElementById('stepBadge').innerText = "Fase 1";
-            document.getElementById('instructionText').innerText = "Sincronizando posicion actual del laser...";
+            document.getElementById('instructionText').innerText = "Localizando laser dentro de la camara...";
 
             // 1. Obtener posicion real actual del ESP32
             try {
@@ -760,12 +819,12 @@
                 if (st.rotacion !== undefined) rotacionActual = st.rotacion;
             } catch (e) {}
 
-            // Si no se ve el laser en la posicion actual, buscarlo suavemente alrededor del centro
+            // Verificar si el laser ya esta visible en la posicion actual
             let p0 = await medirPosicionLaser();
             if (!p0.detected) {
-                const busquedas = [[110, 120], [95, 120], [125, 120], [110, 100], [110, 140], [90, 90]];
+                const busquedas = [[110, 120], [95, 120], [125, 120], [110, 100], [110, 140], [90, 90], [120, 90]];
                 for (const [bc, br] of busquedas) {
-                    await moverServos(bc, br);
+                    await moverServos(bc, br, 600);
                     p0 = await medirPosicionLaser();
                     if (p0.detected) break;
                 }
@@ -778,33 +837,35 @@
                 return;
             }
 
-            // Punto seguro ancla donde sabemos que el laser es visible
+            // Punto ancla seguro donde sabemos al 100% que el laser esta dentro de la camara
             const safeCab = cabeceoActual;
             const safeRot = rotacionActual;
 
-            // 2. Probar Rotacion con paso suave (+7° o -7° si se sale)
-            let dRot = safeRot > 160 ? -7 : 7;
-            await moverServos(safeCab, safeRot + dRot);
+            document.getElementById('instructionText').innerText = "Midiendo direccion de ejes...";
+
+            // 2. Probar Rotacion (+8° o -8°) con 650ms de asentamiento
+            let dRot = safeRot > 160 ? -8 : 8;
+            await moverServos(safeCab, safeRot + dRot, 650);
             let pRot = await medirPosicionLaser();
             if (!pRot.detected) {
-                await moverServos(safeCab, safeRot);
+                await moverServos(safeCab, safeRot, 650);
                 dRot = -dRot;
-                await moverServos(safeCab, safeRot + dRot);
+                await moverServos(safeCab, safeRot + dRot, 650);
                 pRot = await medirPosicionLaser();
             }
-            await moverServos(safeCab, safeRot);
+            await moverServos(safeCab, safeRot, 650);
 
-            // 3. Probar Cabeceo con paso suave (+7° o -7° si se sale)
-            let dCab = safeCab > 160 ? -7 : 7;
-            await moverServos(safeCab + dCab, safeRot);
+            // 3. Probar Cabeceo (+8° o -8°) con 650ms de asentamiento
+            let dCab = safeCab > 160 ? -8 : 8;
+            await moverServos(safeCab + dCab, safeRot, 650);
             let pCab = await medirPosicionLaser();
             if (!pCab.detected) {
-                await moverServos(safeCab, safeRot);
+                await moverServos(safeCab, safeRot, 650);
                 dCab = -dCab;
-                await moverServos(safeCab + dCab, safeRot);
+                await moverServos(safeCab + dCab, safeRot, 650);
                 pCab = await medirPosicionLaser();
             }
-            await moverServos(safeCab, safeRot);
+            await moverServos(safeCab, safeRot, 650);
 
             if (pRot.detected && pCab.detected) {
                 const jCandidate = {
@@ -835,13 +896,22 @@
                 document.getElementById('stepBadge').innerText = `${i+1} / 4`;
                 document.getElementById('instructionText').innerText = `Alineando: ${t.name}`;
 
+                // Verificar que el laser sea visible antes de empezar esta esquina; si no, volver al ancla segura
+                let checkStart = await medirPosicionLaser();
+                if (!checkStart.detected) {
+                    await moverServos(safeCab, safeRot, 650);
+                    checkStart = await medirPosicionLaser();
+                }
+
                 let lastValidCab = cabeceoActual;
                 let lastValidRot = rotacionActual;
-                let lastLx = t.pt.x, lastLy = t.pt.y;
+                let lastLx = checkStart.detected ? checkStart.x : t.pt.x;
+                let lastLy = checkStart.detected ? checkStart.y : t.pt.y;
                 let stepGain = 0.55;
-                let stepMax = 8;
+                let stepMax = 6;
+                let lostCount = 0;
 
-                for (let step = 0; step < 14; step++) {
+                for (let step = 0; step < 16; step++) {
                     const res = await fetch('/api/align_step', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -859,35 +929,53 @@
                     const d = await res.json();
 
                     if (d.status === "laser_not_found") {
-                        // Se salio del rango visual: regresar inmediatamente al ultimo punto valido y reducir paso
-                        document.getElementById('instructionText').innerText = `Recuperando laser dentro de camara (${t.name})...`;
-                        await moverServos(lastValidCab, lastValidRot);
+                        lostCount++;
+                        laserPos.detected = false;
+                        document.getElementById('instructionText').innerText = `Regresando laser al area visible (${t.name})...`;
+                        if (lostCount >= 2) {
+                            // Si sigue perdido tras regresar al ultimo valido, volver directo al ancla segura
+                            await moverServos(safeCab, safeRot, 650);
+                        } else {
+                            await moverServos(lastValidCab, lastValidRot, 600);
+                        }
                         stepGain = Math.max(0.25, stepGain * 0.55);
-                        stepMax = Math.max(3, Math.floor(stepMax * 0.6));
+                        stepMax = Math.max(2, Math.floor(stepMax * 0.6));
                         continue;
                     }
 
+                    lostCount = 0;
                     lastValidCab = cabeceoActual;
                     lastValidRot = rotacionActual;
-                    if (d.laser_x !== undefined) { lastLx = d.laser_x; lastLy = d.laser_y; }
+                    lastLx = d.laser_x;
+                    lastLy = d.laser_y;
+                    laserPos.detected = true;
+                    laserPos.x = d.laser_x;
+                    laserPos.y = d.laser_y;
+
+                    if (d.alineado) break;
+
                     if (d.nuevo_cabeceo !== undefined) {
                         cabeceoActual = d.nuevo_cabeceo;
                         rotacionActual = d.nueva_rotacion;
                     }
-                    if (d.alineado) break;
-                    await new Promise(r => setTimeout(r, 380));
+                    await new Promise(r => setTimeout(r, 550));
                 }
 
-                // Asegurar que la esquina guardada corresponda al ultimo punto valido detectado
-                const check = await medirPosicionLaser();
-                if (!check.detected) {
-                    await moverServos(lastValidCab, lastValidRot);
+                // Confirmar posicion final visible de la esquina
+                const finalCheck = await medirPosicionLaser();
+                if (!finalCheck.detected) {
+                    await moverServos(lastValidCab, lastValidRot, 600);
+                } else {
+                    lastLx = finalCheck.x;
+                    lastLy = finalCheck.y;
                 }
 
                 cal[`c${t.key}`] = cabeceoActual;
                 cal[`r${t.key}`] = rotacionActual;
                 camCorners.push([lastLx, lastLy]);
             }
+
+            calibratedPolygon = camCorners;
 
             document.getElementById('stepBadge').innerText = "Verificando";
             document.getElementById('instructionText').innerText = "Calculando Homografia 3x3 y verificando centro...";
