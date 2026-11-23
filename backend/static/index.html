@@ -377,51 +377,34 @@
     </header>
 
     <main>
-        <!-- VISTA 1: CALIBRACIÓN E IDENTIFICACIÓN -->
-        <div id="viewCalibrar">
-            <div class="camera-card">
-                <video id="video" autoplay playsinline muted></video>
-                <canvas id="overlayCanvas"></canvas>
+        <!-- CAMARA COMPARTIDA EN AMBAS VISTAS -->
+        <div class="camera-card" style="height: 38vh;">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="overlayCanvas"></canvas>
 
-                <div class="camera-pills">
-                    <div class="pill" id="laserStatusPill">Buscando laser</div>
-                    <div class="pill" id="cornerCountPill">Esquinas: 0 / 2</div>
-                </div>
-
-                <div class="lens-bar" id="lensBar">
-                    <button class="btn-zoom active" id="btnZoom1" onclick="seleccionarLente(0)">Cam 1</button>
-                </div>
+            <div class="camera-pills">
+                <div class="pill" id="laserStatusPill">Buscando laser</div>
+                <div class="pill" id="cornerCountPill">4 Esquinas Camara</div>
             </div>
 
+            <div class="lens-bar" id="lensBar">
+                <button class="btn-zoom active" id="btnZoom1" onclick="seleccionarLente(0)">Cam 1</button>
+            </div>
+        </div>
+
+        <!-- VISTA 1: SOLO CALIBRACIÓN -->
+        <div id="viewCalibrar">
             <div class="card">
                 <div class="status-line" style="justify-content: space-between; margin-bottom: 10px;">
-                    <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Modo Area Segura</span>
-                    <div class="segmented-control" style="transform: scale(0.88); transform-origin: right;">
+                    <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Modo Calibracion</span>
+                    <div class="segmented-control" style="transform: scale(0.92); transform-origin: right;">
                         <button class="seg-btn active" id="modeFullBtn" onclick="setAreaMode('full')">Camara</button>
-                        <button class="seg-btn" id="modeManualBtn" onclick="setAreaMode('manual')">2 Esquinas</button>
                         <button class="seg-btn" id="modeJoystickBtn" onclick="setAreaMode('joystick')">Ejes</button>
                     </div>
                 </div>
                 <div class="status-line">
                     <span class="step-badge" id="stepBadge">Listo</span>
                     <span id="instructionText">Usando las 4 esquinas de la camara. Pulsa Auto-Calibrar.</span>
-                </div>
-            </div>
-
-            <div id="visionToolsBlock" style="display:flex; flex-direction:column; gap:10px;">
-                <div class="filter-bar">
-                    <button class="filter-pill" onclick="buscarColorLocal('Todas')">Detectar Todo</button>
-                    <button class="filter-pill" onclick="buscarColorLocal('Blanco')">Blancas</button>
-                    <button class="filter-pill" onclick="buscarColorLocal('Verde pastel')">Verde Pastel</button>
-                    <button class="filter-pill" onclick="buscarColorLocal('Amarillo')">Amarillas</button>
-                    <button class="filter-pill" onclick="buscarColorLocal('Azul')">Azules</button>
-                    <button class="filter-pill" onclick="buscarColorLocal('Rojo')">Rojas</button>
-                </div>
-
-                <div class="cmd-row">
-                    <input type="text" id="cmdInput" class="cmd-input" placeholder="Ej: señala verde pastel...">
-                    <button class="btn" onclick="iniciarVoz()" id="btnVoz">Voz</button>
-                    <button class="btn btn-blue" onclick="enviarComando()">Ir</button>
                 </div>
             </div>
 
@@ -494,12 +477,31 @@
             </div>
 
             <div class="action-grid">
-                <button class="btn btn-indigo btn-full" id="btnIdentify" onclick="identificarYSenalar()">Identificar con IA</button>
-                <button class="btn btn-blue" id="btnAutoCalibrar" onclick="autoCalibrar()">Auto-Calibrar</button>
+                <button class="btn btn-blue btn-full" id="btnAutoCalibrar" onclick="autoCalibrar()">Auto-Calibrar</button>
                 <button class="btn" onclick="centrarAreaSegura()">Centro</button>
                 <button class="btn btn-red on" id="btnLaserToggle" onclick="toggleLaser()">Laser: ON</button>
-                <button class="btn" onclick="limpiarEsquinas()">Reiniciar</button>
+                <button class="btn btn-full" onclick="limpiarEsquinas()">Reiniciar Calibracion</button>
             </div>
+        </div>
+
+        <!-- VISTA 2: ÁREA SEGURA (IA + IDENTIFICACIÓN + CONTROL CARTESIANO) -->
+        <div id="viewControl">
+            <div class="filter-bar">
+                <button class="filter-pill" onclick="buscarColorLocal('Todas')">Detectar Todo</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Blanco')">Blancas</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Verde pastel')">Verde Pastel</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Amarillo')">Amarillas</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Azul')">Azules</button>
+                <button class="filter-pill" onclick="buscarColorLocal('Rojo')">Rojas</button>
+            </div>
+
+            <div class="cmd-row">
+                <input type="text" id="cmdInput" class="cmd-input" placeholder="Ej: señala verde pastel...">
+                <button class="btn" onclick="iniciarVoz()" id="btnVoz">Voz</button>
+                <button class="btn btn-blue" onclick="enviarComando()">Ir</button>
+            </div>
+
+            <button class="btn btn-indigo btn-full" id="btnIdentify" onclick="identificarYSenalar()">Identificar con IA</button>
 
             <div id="identifyCard">
                 <div class="id-header">
@@ -512,17 +514,14 @@
                 </div>
                 <div class="other-chips" id="otherChips"></div>
             </div>
-        </div>
 
-        <!-- VISTA 2: CONTROL DEL ÁREA SEGURA -->
-        <div id="viewControl">
             <div class="metrics-row">
                 <div class="metric-box"><span>Coord (-5 a 5)</span><b id="ctrlXY">0.0, 0.0</b></div>
                 <div class="metric-box"><span>Cabeceo</span><b id="ctrlC">--°</b></div>
                 <div class="metric-box"><span>Rotacion</span><b id="ctrlR">--°</b></div>
             </div>
 
-            <div class="touchpad-wrapper" id="safePad">
+            <div class="touchpad-wrapper" id="safePad" style="max-height: 36vh;">
                 <div class="grid-lines"></div>
                 <div class="crosshair-center"></div>
                 <span class="corner-tag tag-tl" id="padTL">(-5, 5)</span>
@@ -658,28 +657,13 @@
         }
         window.addEventListener('resize', ajustarCanvas);
 
-        canvas.addEventListener('click', (e) => {
-            if (calibrando) return;
-            if (areaMode === 'full') setAreaMode('manual');
-            if (esquinas.length >= 2) esquinas = [];
-            const rect = canvas.getBoundingClientRect();
-            esquinas.push({
-                x: (e.clientX - rect.left) / rect.width,
-                y: (e.clientY - rect.top) / rect.height
-            });
-            actualizarUIEsquinas();
-        });
-
         function setAreaMode(mode) {
             areaMode = mode;
             document.getElementById('modeFullBtn').classList.toggle('active', mode === 'full');
-            document.getElementById('modeManualBtn').classList.toggle('active', mode === 'manual');
             document.getElementById('modeJoystickBtn').classList.toggle('active', mode === 'joystick');
 
             const isJoy = mode === 'joystick';
             document.getElementById('joystickCard').style.display = isJoy ? 'block' : 'none';
-            document.getElementById('visionToolsBlock').style.display = isJoy ? 'none' : 'flex';
-            document.getElementById('btnIdentify').style.display = isJoy ? 'none' : 'block';
             document.getElementById('btnAutoCalibrar').style.display = isJoy ? 'none' : 'block';
 
             if (isJoy) reiniciarJoystick();
@@ -1362,6 +1346,7 @@
         }
 
         async function apuntarDirectoOHibrido(x, y, label) {
+            let jumped = false;
             try {
                 const res = await fetch('/api/point_camera_xy', {
                     method: 'POST',
@@ -1370,14 +1355,50 @@
                 });
                 if (res.ok) {
                     const d = await res.json();
-                    if (d.pointed) {
-                        document.getElementById('stepBadge').innerText = "Señalado";
-                        document.getElementById('instructionText').innerText = `Laser apuntando a: ${label} (Homografia)`;
-                        return;
+                    if (d.pointed && d.esp32) {
+                        jumped = true;
+                        if (d.esp32.cabeceo !== undefined) cabeceoActual = d.esp32.cabeceo;
+                        if (d.esp32.rotacion !== undefined) rotacionActual = d.esp32.rotacion;
+                        if (d.u !== undefined && d.v !== undefined) {
+                            cursor.style.left = (d.u * 100) + '%';
+                            cursor.style.top = (d.v * 100) + '%';
+                            document.getElementById('ctrlXY').innerText = uvACartesiano(d.u, d.v);
+                        }
+                        actualizarEstadoCtrl(d.esp32);
+                        await new Promise(r => setTimeout(r, 480));
                     }
                 }
             } catch (e) {}
-            await apuntarAObjetivo(x, y, label);
+
+            // Refinamiento visual en lazo cerrado (hasta 4 pasos suaves) para clavar el centro del objeto
+            const j = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
+            for (let step = 0; step < (jumped ? 4 : 7); step++) {
+                try {
+                    const res = await fetch('/api/align_step', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_base64: capturarFrameBase64(480),
+                            target_x: x,
+                            target_y: y,
+                            cabeceo_actual: cabeceoActual,
+                            rotacion_actual: rotacionActual,
+                            gain: 0.6,
+                            max_step: 6,
+                            ...j
+                        })
+                    });
+                    const d = await res.json();
+                    if (d.status === "laser_not_found") break;
+                    if (d.nuevo_cabeceo !== undefined) {
+                        cabeceoActual = d.nuevo_cabeceo;
+                        rotacionActual = d.nueva_rotacion;
+                    }
+                    if (d.alineado) break;
+                    await new Promise(r => setTimeout(r, 420));
+                } catch (e) { break; }
+            }
+            cargarEstadoESP32();
         }
 
         async function buscarColorLocal(colorFiltro) {
