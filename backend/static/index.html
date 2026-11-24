@@ -396,16 +396,9 @@
         <!-- VISTA 1: SOLO CALIBRACIÓN -->
         <div id="viewCalibrar">
             <div class="card">
-                <div class="status-line" style="justify-content: space-between; margin-bottom: 10px;">
-                    <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">Modo Calibracion</span>
-                    <div class="segmented-control" style="transform: scale(0.92); transform-origin: right;">
-                        <button class="seg-btn active" id="modeFullBtn" onclick="setAreaMode('full')">Camara</button>
-                        <button class="seg-btn" id="modeJoystickBtn" onclick="setAreaMode('joystick')">Ejes</button>
-                    </div>
-                </div>
                 <div class="status-line">
-                    <span class="step-badge" id="stepBadge">Listo</span>
-                    <span id="instructionText">Usando las 4 esquinas de la camara. Pulsa Auto-Calibrar.</span>
+                    <span class="step-badge" id="stepBadge">Manual</span>
+                    <span id="instructionText">Calibracion manual: ajusta Eje 1 y Eje 2 y captura las 4 esquinas.</span>
                 </div>
             </div>
 
@@ -444,7 +437,7 @@
             </div>
 
             <!-- MODO BARRAS EJE 1 Y EJE 2 PARA CAPTURAR LAS 4 ESQUINAS -->
-            <div class="card" id="joystickCard" style="display:none;">
+            <div class="card" id="joystickCard" style="display:block;">
                 <div class="id-header" style="margin-bottom: 10px;">
                     <span class="id-title" style="color: var(--blue);" id="joyCornerLabel">Esquina 1/4: (-5, 5)</span>
                     <span class="id-model" id="joyAnglesText">115° / 124°</span>
@@ -478,7 +471,6 @@
             </div>
 
             <div class="action-grid">
-                <button class="btn btn-blue btn-full" id="btnAutoCalibrar" onclick="autoCalibrar()">Auto-Calibrar</button>
                 <button class="btn" onclick="centrarAreaSegura()">Centro</button>
                 <button class="btn btn-red on" id="btnLaserToggle" onclick="toggleLaser()">Laser: ON</button>
                 <button class="btn btn-full" onclick="limpiarEsquinas()">Reiniciar Calibracion</button>
