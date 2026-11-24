@@ -585,7 +585,7 @@ void handleSafeArea() {
         guardarCalibracion();
         modoRectangulo = false;
         moverNormalizado(0.5f, 0.5f);
-        textoOledPrincipal = "Area Segura OK";
+        // Area segura actualizada sin sobreescribir OLED
         oledNecesitaActualizar = true;
         iniciarBuzzer(1);
     }

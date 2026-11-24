@@ -371,8 +371,8 @@
     <header>
         <div class="logo">TRAK</div>
         <div class="segmented-control">
-            <button class="seg-btn active" id="tabCalibrar" onclick="cambiarVista('calibrar')">Calibrar</button>
-            <button class="seg-btn" id="tabControl" onclick="cambiarVista('control')">Area Segura</button>
+            <button class="seg-btn" id="tabCalibrar" style="display:none;" onclick="cambiarVista('calibrar')">Calibrar</button>
+            <button class="seg-btn active" id="tabControl" onclick="cambiarVista('control')">Principal</button>
             <button class="seg-btn" id="tabAjustes" onclick="cambiarVista('ajustes')">Ajustes</button>
         </div>
     </header>
@@ -1044,6 +1044,13 @@
         })();
 
         let barThrottle = 0;
+        (function initApp() {
+            cambiarVista('control');
+            if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                const cam = document.querySelector('.camera-box');
+                if (cam) cam.style.display = 'none';
+            }
+        })();
         function moverDesdeBarra(prefix, eje, valStr) {
             const val = parseInt(valStr, 10);
             if (eje === 1) cabeceoActual = val;
