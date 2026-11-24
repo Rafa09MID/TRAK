@@ -27,6 +27,10 @@ const char* AP_PASS       = "12345678";
 #define PIN_CABECEO   39  // Servo cabeceo (Pin 39)
 #define PIN_ROTACION  40  // Servo rotación (Pin 40)
 #define PIN_LASER     41  // LED multicolor 3 pines (Pin 41)
+#define PIN_TRIG      15  // Ultrasónico TRIG (Pin 15)
+#define PIN_ECHO      16  // Ultrasónico ECHO (Pin 16)
+int distanciaCM = 999;
+unsigned long ultimoPing = 0;
 Adafruit_NeoPixel ledPuntero(1, PIN_LASER, NEO_GRB + NEO_KHZ800);
 uint8_t ledR = 255, ledG = 255, ledB = 255; // Blanco por defecto
 bool modoFiesta = false;
@@ -411,6 +415,38 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
+void dibujarRadarOled() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    if (modoDisparo) {
+        display.setCursor(16, 0);
+        display.print("! DISPARANDO !");
+        int anim = (pasoDisparo % 3) * 8;
+        display.drawLine(64, 63, 40 - anim, 18, SSD1306_WHITE);
+        display.drawLine(64, 63, 64, 14 + (anim / 2), SSD1306_WHITE);
+        display.drawLine(64, 63, 88 + anim, 18, SSD1306_WHITE);
+        display.fillCircle(64, 24 + anim, 3, SSD1306_WHITE);
+    } else {
+        display.setCursor(0, 0);
+        display.print("RADAR: ");
+        if (distanciaCM < 300) {
+            display.print(distanciaCM);
+            display.print(" cm");
+        } else {
+            display.print("Libre");
+        }
+        display.drawCircle(64, 63, 18, SSD1306_WHITE);
+        display.drawCircle(64, 63, 34, SSD1306_WHITE);
+        display.drawCircle(64, 63, 50, SSD1306_WHITE);
+        if (distanciaCM < 100) {
+            int r = map(constrain(distanciaCM, 2, 100), 2, 100, 8, 50);
+            display.fillCircle(64, 63 - r, 3, SSD1306_WHITE);
+        }
+    }
+    display.display();
+}
+
 String jsonEstado() {
     return String("{\"cabeceo\":") + anguloCabeceo +
            ",\"rotacion\":" + anguloRotacion +
@@ -437,27 +473,49 @@ void handleFiesta() {
     }
     bool activar = !server.hasArg("on") || server.arg("on") != "0";
     modoFiesta = activar;
+    // Lectura ultrasónica cada 120ms
+    if (millis() - ultimoPing >= 120) {
+        ultimoPing = millis();
+        digitalWrite(PIN_TRIG, LOW);
+        delayMicroseconds(2);
+        digitalWrite(PIN_TRIG, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(PIN_TRIG, LOW);
+        long dur = pulseIn(PIN_ECHO, HIGH, 15000);
+        distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
+
+        if (distanciaCM > 2 && distanciaCM < 35 && !modoDisparo) {
+            modoDisparo = true;
+            inicioDisparo = millis();
+            ultimoPasoDisparo = 0;
+            pasoDisparo = 0;
+        }
+        dibujarRadarOled();
+    }
+
     if (modoDisparo) {
         if (millis() - inicioDisparo > 2200) {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
-        } else if (millis() - ultimoPasoDisparo >= 45) {
+            dibujarRadarOled();
+        } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga de disparos con caída rápida de frecuencia y parpadeo de láser/LED
+            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz)
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
-                tone(PIN_BUZZER, 1700, 40);
+                tone(PIN_BUZZER, 2400, 60);
             } else if (fase == 1) {
-                tone(PIN_BUZZER, 950, 40);
+                tone(PIN_BUZZER, 1900, 60);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
-                tone(PIN_BUZZER, 420, 35);
+                tone(PIN_BUZZER, 1400, 55);
             } else {
                 noTone(PIN_BUZZER);
             }
             pasoDisparo++;
+            dibujarRadarOled();
         }
     }
 
@@ -585,6 +643,8 @@ void setup() {
     ledPuntero.begin();
     ledPuntero.setBrightness(255);
     pinMode(PIN_LASER, OUTPUT);
+    pinMode(PIN_TRIG, OUTPUT);
+    pinMode(PIN_ECHO, INPUT);
     actualizarLaser(true);
 
     led48.begin();
@@ -665,27 +725,49 @@ void loop() {
 
     actualizarServosSuaves();
 
+    // Lectura ultrasónica cada 120ms
+    if (millis() - ultimoPing >= 120) {
+        ultimoPing = millis();
+        digitalWrite(PIN_TRIG, LOW);
+        delayMicroseconds(2);
+        digitalWrite(PIN_TRIG, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(PIN_TRIG, LOW);
+        long dur = pulseIn(PIN_ECHO, HIGH, 15000);
+        distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
+
+        if (distanciaCM > 2 && distanciaCM < 35 && !modoDisparo) {
+            modoDisparo = true;
+            inicioDisparo = millis();
+            ultimoPasoDisparo = 0;
+            pasoDisparo = 0;
+        }
+        dibujarRadarOled();
+    }
+
     if (modoDisparo) {
         if (millis() - inicioDisparo > 2200) {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
-        } else if (millis() - ultimoPasoDisparo >= 45) {
+            dibujarRadarOled();
+        } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga de disparos con caída rápida de frecuencia y parpadeo de láser/LED
+            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz)
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
-                tone(PIN_BUZZER, 1700, 40);
+                tone(PIN_BUZZER, 2400, 60);
             } else if (fase == 1) {
-                tone(PIN_BUZZER, 950, 40);
+                tone(PIN_BUZZER, 1900, 60);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
-                tone(PIN_BUZZER, 420, 35);
+                tone(PIN_BUZZER, 1400, 55);
             } else {
                 noTone(PIN_BUZZER);
             }
             pasoDisparo++;
+            dibujarRadarOled();
         }
     }
 
