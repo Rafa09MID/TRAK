@@ -1000,11 +1000,48 @@
             const jS2 = document.getElementById('joySliderEje2');
             if (cS1) { cS1.value = cabeceoActual; document.getElementById('confValEje1').innerText = cabeceoActual + '°'; }
             if (cS2) { cS2.value = rotacionActual; document.getElementById('confValEje2').innerText = rotacionActual + '°'; }
-            if (jS1) { jS1.value = cabeceoActual; document.getElementById('joyValEje1').innerText = cabeceoActual + '°'; }
-            if (jS2) { jS2.value = rotacionActual; document.getElementById('joyValEje2').innerText = rotacionActual + '°'; }
-            document.getElementById('confirmAnglesText').innerText = angTxt;
-            document.getElementById('joyAnglesText').innerText = angTxt;
+            const pctCab = Math.round(((cabeceoActual - 90) / 90) * 100);
+            const lblCab = pctCab <= 2 ? 'Abajo (0%)' : `Arriba ${pctCab}%`;
+            const diffRot = rotacionActual - 130;
+            const lblRot = Math.abs(diffRot) <= 2 ? 'Centro' : (diffRot < 0 ? `Izq ${Math.round((-diffRot / 50) * 100)}%` : `Der ${Math.round((diffRot / 50) * 100)}%`);
+            if (jS1) { jS1.value = cabeceoActual; document.getElementById('joyValEje1').innerText = lblCab; }
+            if (jS2) { jS2.value = rotacionActual; document.getElementById('joyValEje2').innerText = lblRot; }
+            document.getElementById('confirmAnglesText').innerText = `${lblCab} · ${lblRot}`;
+            document.getElementById('joyAnglesText').innerText = `${lblCab} · ${lblRot}`;
+            const simDot = document.getElementById('joySimDot');
+            if (simDot) {
+                const xPct = Math.max(0, Math.min(100, ((rotacionActual - 80) / 100) * 100));
+                const yPct = Math.max(0, Math.min(100, 100 - ((cabeceoActual - 90) / 90) * 100));
+                simDot.style.left = xPct + '%';
+                simDot.style.top = yPct + '%';
+            }
         }
+
+        (function initJoySim() {
+            const box = document.getElementById('joySimBox');
+            if (!box) return;
+            let dragging = false;
+            const moveFromEvent = (e) => {
+                const r = box.getBoundingClientRect();
+                const nx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+                const ny = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+                rotacionActual = Math.round(80 + nx * 100);
+                cabeceoActual = Math.round(90 + (1 - ny) * 90);
+                sincronizarBarrasEjes();
+                const now = Date.now();
+                if (now - barThrottle < 55) return;
+                barThrottle = now;
+                fetch('/api/esp32/servo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
+                }).catch(() => {});
+            };
+            box.addEventListener('pointerdown', (e) => { dragging = true; box.setPointerCapture(e.pointerId); moveFromEvent(e); });
+            box.addEventListener('pointermove', (e) => { if (dragging) moveFromEvent(e); });
+            box.addEventListener('pointerup', () => { dragging = false; });
+            box.addEventListener('pointercancel', () => { dragging = false; });
+        })();
 
         let barThrottle = 0;
         function moverDesdeBarra(prefix, eje, valStr) {
