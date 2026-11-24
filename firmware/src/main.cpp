@@ -28,7 +28,12 @@ const char* AP_PASS       = "12345678";
 #define PIN_ROTACION  40  // Servo rotación (Pin 40)
 #define PIN_LASER     41  // LED multicolor 3 pines (Pin 41)
 Adafruit_NeoPixel ledPuntero(1, PIN_LASER, NEO_GRB + NEO_KHZ800);
-uint8_t ledR = 0, ledG = 0, ledB = 255; // Azul por defecto
+uint8_t ledR = 255, ledG = 255, ledB = 255; // Blanco por defecto
+bool modoFiesta = false;
+unsigned long inicioFiesta = 0;
+unsigned long ultimoPasoFiesta = 0;
+int pasoFiesta = 0;
+int baseCabeceoFiesta = 90;
 #define PIN_BUZZER    7   // Buzzer 2 pines (Pin 7)
 #define PIN_OLED_SDA  8   // OLED SDA (Pin 8)
 #define PIN_OLED_SCL  9   // OLED SCL (Pin 9)
@@ -418,6 +423,25 @@ String jsonEstado() {
            ",\"cBL\":" + cBL + ",\"rBL\":" + rBL + "}}";
 }
 
+void handleFiesta() {
+    if (server.hasArg("r") && server.hasArg("g") && server.hasArg("b")) {
+        ledR = constrain(server.arg("r").toInt(), 0, 255);
+        ledG = constrain(server.arg("g").toInt(), 0, 255);
+        ledB = constrain(server.arg("b").toInt(), 0, 255);
+        actualizarLaser(true);
+    }
+    bool activar = !server.hasArg("on") || server.arg("on") != "0";
+    modoFiesta = activar;
+    if (modoFiesta) {
+        inicioFiesta = millis();
+        pasoFiesta = 0;
+        baseCabeceoFiesta = constrain(anguloCabeceo, 25, 155);
+    } else {
+        noTone(PIN_BUZZER);
+    }
+    server.send(200, "application/json", jsonEstado());
+}
+
 void handleRoot() { server.send(200, "text/html", INDEX_HTML); }
 void handleStatus() { server.send(200, "application/json", jsonEstado()); }
 
@@ -572,6 +596,7 @@ void setup() {
     server.on("/", HTTP_GET, handleRoot);
     server.on("/api/status", HTTP_GET, handleStatus);
     server.on("/api/servo", HTTP_POST, handleSetServo);
+    server.on("/api/fiesta", HTTP_POST, handleFiesta);
     server.on("/api/move_norm", HTTP_POST, handleMoveNorm);
     server.on("/api/center", HTTP_POST, handleCenter);
     server.on("/api/safe_area", HTTP_POST, handleSafeArea);
@@ -601,6 +626,21 @@ void loop() {
     }
 
     actualizarServosSuaves();
+
+    if (modoFiesta) {
+        if (millis() - inicioFiesta > 5000) {
+            modoFiesta = false;
+            noTone(PIN_BUZZER);
+            moverCabeceoHW(baseCabeceoFiesta);
+        } else if (millis() - ultimoPasoFiesta >= 180) {
+            ultimoPasoFiesta = millis();
+            const int notas[] = {523, 659, 784, 1046, 784, 659, 880, 1046};
+            tone(PIN_BUZZER, notas[pasoFiesta % 8], 140);
+            int offset = (pasoFiesta % 2 == 0) ? 12 : -12;
+            moverCabeceoHW(baseCabeceoFiesta + offset);
+            pasoFiesta++;
+        }
+    }
 
     if (oledNecesitaActualizar) {
         dibujarOled();

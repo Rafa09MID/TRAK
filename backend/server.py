@@ -284,6 +284,7 @@ def api_identify_and_point(payload: ImagePayload):
             "{\n"
             '  "objeto": "Nombre corto del objeto en español",\n'
             '  "descripcion": "Qué es y dónde se encuentra brevemente (1 frase)",\n'
+            '  "color_rgb": [R, G, B],\n'
             '  "box_2d": [ymin, xmin, ymax, xmax],\n'
             '  "otros_objetos": [{"nombre": "...", "box_2d": [ymin, xmin, ymax, xmax]}]\n'
             "}"
@@ -305,6 +306,14 @@ def api_identify_and_point(payload: ImagePayload):
         ymin, xmin, ymax, xmax = [float(v) / 1000.0 for v in box]
         target_x = round((xmin + xmax) / 2.0, 4)
         target_y = round((ymin + ymax) / 2.0, 4)
+
+        color_rgb = parsed.get("color_rgb", [255, 255, 255])
+        if isinstance(color_rgb, list) and len(color_rgb) == 3:
+            try:
+                cr, cg, cb = [max(0, min(255, int(c))) for c in color_rgb]
+                requests.post(f"{ESP32_URL}/api/fiesta", params={"r": cr, "g": cg, "b": cb, "on": 1}, timeout=1.5)
+            except Exception:
+                pass
 
         otros = []
         for obj in parsed.get("otros_objetos", [])[:4]:
