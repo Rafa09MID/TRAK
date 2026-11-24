@@ -31,6 +31,7 @@ const char* AP_PASS       = "12345678";
 #define PIN_ECHO      16  // Ultrasónico ECHO (Pin 16)
 int distanciaCM = 999;
 unsigned long ultimoPing = 0;
+unsigned long ultimoNotifyMs = 0;
 Adafruit_NeoPixel ledPuntero(1, PIN_LASER, NEO_GRB + NEO_KHZ800);
 uint8_t ledR = 255, ledG = 255, ledB = 255; // Blanco por defecto
 bool modoFiesta = false;
@@ -429,12 +430,17 @@ void dibujarRadarOled() {
         display.fillCircle(64, 24 + anim, 3, SSD1306_WHITE);
     } else {
         display.setCursor(0, 0);
-        display.print("RADAR: ");
-        if (distanciaCM < 300) {
-            display.print(distanciaCM);
-            display.print(" cm");
+        if (textoOledPrincipal.length() > 0 && millis() - ultimoNotifyMs < 5000) {
+            display.print("OBJ: ");
+            display.print(sanitizarASCII(textoOledPrincipal).substring(0, 15));
         } else {
-            display.print("Libre");
+            display.print("RADAR: ");
+            if (distanciaCM < 300) {
+                display.print(distanciaCM);
+                display.print(" cm");
+            } else {
+                display.print("Libre");
+            }
         }
         display.drawCircle(64, 63, 18, SSD1306_WHITE);
         display.drawCircle(64, 63, 34, SSD1306_WHITE);
@@ -587,6 +593,7 @@ void handleSafeArea() {
 }
 
 void handleNotify() {
+    ultimoNotifyMs = millis();
     if (server.hasArg("text")) {
         textoOledPrincipal = server.arg("text");
         oledNecesitaActualizar = true;
