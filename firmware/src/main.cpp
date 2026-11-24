@@ -26,7 +26,9 @@ const char* AP_PASS       = "12345678";
 // Definición de pines
 #define PIN_CABECEO   39  // Servo cabeceo (Pin 39)
 #define PIN_ROTACION  40  // Servo rotación (Pin 40)
-#define PIN_LASER     41  // Láser (Pin 41)
+#define PIN_LASER     41  // LED multicolor 3 pines (Pin 41)
+Adafruit_NeoPixel ledPuntero(1, PIN_LASER, NEO_GRB + NEO_KHZ800);
+uint8_t ledR = 0, ledG = 0, ledB = 255; // Azul por defecto
 #define PIN_BUZZER    7   // Buzzer 2 pines (Pin 7)
 #define PIN_OLED_SDA  8   // OLED SDA (Pin 8)
 #define PIN_OLED_SCL  9   // OLED SCL (Pin 9)
@@ -276,6 +278,12 @@ void moverRotacionHW(int angulo) {
 void actualizarLaser(bool encender) {
     estadoLaser = encender;
     digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+    if (estadoLaser) {
+        ledPuntero.setPixelColor(0, ledPuntero.Color(ledR, ledG, ledB));
+    } else {
+        ledPuntero.setPixelColor(0, 0);
+    }
+    ledPuntero.show();
     oledNecesitaActualizar = true;
 }
 
@@ -513,6 +521,8 @@ void setup() {
     Serial.begin(115200);
 
     pinMode(PIN_BOTON, INPUT_PULLUP);
+    ledPuntero.begin();
+    ledPuntero.setBrightness(255);
     pinMode(PIN_LASER, OUTPUT);
     actualizarLaser(true);
 
