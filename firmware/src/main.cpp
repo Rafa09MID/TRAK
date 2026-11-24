@@ -794,7 +794,7 @@ void loop() {
     }
 
     if (oledNecesitaActualizar) {
-        dibujarOled();
+        oledNecesitaActualizar = false;
     }
 
     // Botón físico deshabilitado para evitar activación accidental de modoRectangulo
