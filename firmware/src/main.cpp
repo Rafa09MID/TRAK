@@ -34,6 +34,11 @@ unsigned long inicioFiesta = 0;
 unsigned long ultimoPasoFiesta = 0;
 int pasoFiesta = 0;
 int baseCabeceoFiesta = 90;
+
+bool modoDisparo = false;
+unsigned long inicioDisparo = 0;
+unsigned long ultimoPasoDisparo = 0;
+int pasoDisparo = 0;
 #define PIN_BUZZER    7   // Buzzer 2 pines (Pin 7)
 #define PIN_OLED_SDA  8   // OLED SDA (Pin 8)
 #define PIN_OLED_SCL  9   // OLED SCL (Pin 9)
@@ -432,6 +437,30 @@ void handleFiesta() {
     }
     bool activar = !server.hasArg("on") || server.arg("on") != "0";
     modoFiesta = activar;
+    if (modoDisparo) {
+        if (millis() - inicioDisparo > 2200) {
+            modoDisparo = false;
+            noTone(PIN_BUZZER);
+            digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+        } else if (millis() - ultimoPasoDisparo >= 45) {
+            ultimoPasoDisparo = millis();
+            // Ráfaga de disparos con caída rápida de frecuencia y parpadeo de láser/LED
+            int fase = pasoDisparo % 4;
+            if (fase == 0) {
+                digitalWrite(PIN_LASER, HIGH);
+                tone(PIN_BUZZER, 1700, 40);
+            } else if (fase == 1) {
+                tone(PIN_BUZZER, 950, 40);
+            } else if (fase == 2) {
+                digitalWrite(PIN_LASER, LOW);
+                tone(PIN_BUZZER, 420, 35);
+            } else {
+                noTone(PIN_BUZZER);
+            }
+            pasoDisparo++;
+        }
+    }
+
     if (modoFiesta) {
         inicioFiesta = millis();
         pasoFiesta = 0;
@@ -439,6 +468,14 @@ void handleFiesta() {
     } else {
         noTone(PIN_BUZZER);
     }
+    server.send(200, "application/json", jsonEstado());
+}
+
+void handleDisparo() {
+    modoDisparo = true;
+    inicioDisparo = millis();
+    ultimoPasoDisparo = 0;
+    pasoDisparo = 0;
     server.send(200, "application/json", jsonEstado());
 }
 
@@ -597,6 +634,7 @@ void setup() {
     server.on("/api/status", HTTP_GET, handleStatus);
     server.on("/api/servo", HTTP_POST, handleSetServo);
     server.on("/api/fiesta", HTTP_POST, handleFiesta);
+    server.on("/api/disparo", HTTP_POST, handleDisparo);
     server.on("/api/move_norm", HTTP_POST, handleMoveNorm);
     server.on("/api/center", HTTP_POST, handleCenter);
     server.on("/api/safe_area", HTTP_POST, handleSafeArea);
@@ -626,6 +664,30 @@ void loop() {
     }
 
     actualizarServosSuaves();
+
+    if (modoDisparo) {
+        if (millis() - inicioDisparo > 2200) {
+            modoDisparo = false;
+            noTone(PIN_BUZZER);
+            digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+        } else if (millis() - ultimoPasoDisparo >= 45) {
+            ultimoPasoDisparo = millis();
+            // Ráfaga de disparos con caída rápida de frecuencia y parpadeo de láser/LED
+            int fase = pasoDisparo % 4;
+            if (fase == 0) {
+                digitalWrite(PIN_LASER, HIGH);
+                tone(PIN_BUZZER, 1700, 40);
+            } else if (fase == 1) {
+                tone(PIN_BUZZER, 950, 40);
+            } else if (fase == 2) {
+                digitalWrite(PIN_LASER, LOW);
+                tone(PIN_BUZZER, 420, 35);
+            } else {
+                noTone(PIN_BUZZER);
+            }
+            pasoDisparo++;
+        }
+    }
 
     if (modoFiesta) {
         if (millis() - inicioFiesta > 5000) {
