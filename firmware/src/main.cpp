@@ -200,6 +200,43 @@ void ponerColorLed(uint8_t r, uint8_t g, uint8_t b) {
     }
 }
 
+unsigned long ultimoPasoLed = 0;
+float ledHue = 0.0f;
+float ledBreathPhase = 0.0f;
+
+void actualizarLedGradienteRespiracion() {
+    if (millis() - ultimoPasoLed < 28) return;
+    ultimoPasoLed = millis();
+
+    ledHue += 0.005f;
+    if (ledHue >= 1.0f) ledHue -= 1.0f;
+
+    ledBreathPhase += 0.06f;
+    if (ledBreathPhase >= 6.283185f) ledBreathPhase -= 6.283185f;
+
+    // Brillo suave en onda senoidal (respiracion) entre 10% y 100%
+    float v = 0.10f + 0.90f * (0.5f + 0.5f * sinf(ledBreathPhase));
+
+    // Conversion HSV -> RGB (S = 1.0)
+    float h6 = ledHue * 6.0f;
+    int i = (int)floorf(h6);
+    float f = h6 - i;
+    float q = v * (1.0f - f);
+    float t = v * f;
+    float r = 0, g = 0, b = 0;
+
+    switch (i % 6) {
+        case 0: r = v; g = t; b = 0; break;
+        case 1: r = q; g = v; b = 0; break;
+        case 2: r = 0; g = v; b = t; break;
+        case 3: r = 0; g = q; b = v; break;
+        case 4: r = t; g = 0; b = v; break;
+        case 5: r = v; g = 0; b = q; break;
+    }
+
+    ponerColorLed((uint8_t)(r * 255.0f), (uint8_t)(g * 255.0f), (uint8_t)(b * 255.0f));
+}
+
 void moverCabeceoHW(int angulo) {
     anguloCabeceo = constrain(angulo, 0, 180);
     int duty = map(anguloCabeceo, 0, 180, DUTY_MIN, DUTY_MAX);
@@ -524,6 +561,7 @@ void loop() {
     ArduinoOTA.handle();
     server.handleClient();
     actualizarBuzzer();
+    actualizarLedGradienteRespiracion();
 
     if (WiFi.status() != WL_CONNECTED && millis() - ultimoCheckWifi > 10000) {
         ultimoCheckWifi = millis();
@@ -556,10 +594,10 @@ void loop() {
             }
 
             switch (ladoActual) {
-                case 1: ponerColorLed(0, 150, 255); moverNormalizado(pasoPerimetro, 0.0f); break;
-                case 2: ponerColorLed(0, 255, 60);  moverNormalizado(1.0f, pasoPerimetro); break;
-                case 3: ponerColorLed(255, 220, 0); moverNormalizado(1.0f - pasoPerimetro, 1.0f); break;
-                case 4: ponerColorLed(255, 0, 100); moverNormalizado(0.0f, 1.0f - pasoPerimetro); break;
+                case 1: moverNormalizado(pasoPerimetro, 0.0f); break;
+                case 2: moverNormalizado(1.0f, pasoPerimetro); break;
+                case 3: moverNormalizado(1.0f - pasoPerimetro, 1.0f); break;
+                case 4: moverNormalizado(0.0f, 1.0f - pasoPerimetro); break;
             }
         }
     }
