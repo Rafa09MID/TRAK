@@ -596,6 +596,8 @@ void loop() {
         dibujarOled();
     }
 
+    // Botón físico deshabilitado para evitar activación accidental de modoRectangulo
+    /*
     if (digitalRead(PIN_BOTON) == LOW) {
         if (millis() - ultimoDebounce > 300) {
             ultimoDebounce = millis();
@@ -607,6 +609,7 @@ void loop() {
             }
         }
     }
+    */
 
     if (modoRectangulo) {
         if (millis() - ultimoPasoRect >= 25) {
