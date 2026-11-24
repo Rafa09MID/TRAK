@@ -484,7 +484,7 @@ void handleFiesta() {
         long dur = pulseIn(PIN_ECHO, HIGH, 15000);
         distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
 
-        if (distanciaCM > 2 && distanciaCM < 35 && !modoDisparo) {
+        if (distanciaCM > 1 && distanciaCM <= 10 && !modoDisparo) {
             modoDisparo = true;
             inicioDisparo = millis();
             ultimoPasoDisparo = 0;
@@ -736,7 +736,7 @@ void loop() {
         long dur = pulseIn(PIN_ECHO, HIGH, 15000);
         distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
 
-        if (distanciaCM > 2 && distanciaCM < 35 && !modoDisparo) {
+        if (distanciaCM > 1 && distanciaCM <= 10 && !modoDisparo) {
             modoDisparo = true;
             inicioDisparo = millis();
             ultimoPasoDisparo = 0;
