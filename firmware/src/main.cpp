@@ -24,9 +24,9 @@ const char* AP_SSID       = "ESP32-Laser-Gimbal";
 const char* AP_PASS       = "12345678";
 
 // Definición de pines
-#define PIN_CABECEO   4   // Servo cabeceo (Pin 4)
-#define PIN_ROTACION  5   // Servo rotación (Pin 5)
-#define PIN_LASER     6   // Láser (Pin 6)
+#define PIN_CABECEO   39  // Servo cabeceo (Pin 39)
+#define PIN_ROTACION  40  // Servo rotación (Pin 40)
+#define PIN_LASER     41  // Láser (Pin 41)
 #define PIN_BUZZER    7   // Buzzer 2 pines (Pin 7)
 #define PIN_OLED_SDA  8   // OLED SDA (Pin 8)
 #define PIN_OLED_SCL  9   // OLED SCL (Pin 9)
@@ -237,17 +237,39 @@ void actualizarLedGradienteRespiracion() {
     ponerColorLed((uint8_t)(r * 255.0f), (uint8_t)(g * 255.0f), (uint8_t)(b * 255.0f));
 }
 
-void moverCabeceoHW(int angulo) {
+int targetCabeceo = 90;
+int targetRotacion = 90;
+unsigned long ultimoPasoServo = 0;
+
+void escribirCabeceoPWM(int angulo) {
     anguloCabeceo = constrain(angulo, 0, 180);
     int duty = map(anguloCabeceo, 0, 180, DUTY_MIN, DUTY_MAX);
     ledcWrite(CANAL_CABECEO, duty);
+}
+
+void escribirRotacionPWM(int angulo) {
+    anguloRotacion = constrain(angulo, 0, 180);
+    int duty = map(anguloRotacion, 0, 180, DUTY_MIN, DUTY_MAX);
+    ledcWrite(CANAL_ROTACION, duty);
+}
+
+void actualizarServosSuaves() {
+    if (millis() - ultimoPasoServo < 12) return;
+    ultimoPasoServo = millis();
+    if (anguloCabeceo < targetCabeceo) escribirCabeceoPWM(anguloCabeceo + 1);
+    else if (anguloCabeceo > targetCabeceo) escribirCabeceoPWM(anguloCabeceo - 1);
+
+    if (anguloRotacion < targetRotacion) escribirRotacionPWM(anguloRotacion + 1);
+    else if (anguloRotacion > targetRotacion) escribirRotacionPWM(anguloRotacion - 1);
+}
+
+void moverCabeceoHW(int angulo) {
+    targetCabeceo = constrain(angulo, 0, 180);
     oledNecesitaActualizar = true;
 }
 
 void moverRotacionHW(int angulo) {
-    anguloRotacion = constrain(angulo, 0, 180);
-    int duty = map(anguloRotacion, 0, 180, DUTY_MIN, DUTY_MAX);
-    ledcWrite(CANAL_ROTACION, duty);
+    targetRotacion = constrain(angulo, 0, 180);
     oledNecesitaActualizar = true;
 }
 
@@ -567,6 +589,8 @@ void loop() {
         ultimoCheckWifi = millis();
         wifiMulti.run();
     }
+
+    actualizarServosSuaves();
 
     if (oledNecesitaActualizar) {
         dibujarOled();
