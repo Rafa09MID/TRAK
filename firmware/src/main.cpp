@@ -44,6 +44,7 @@ bool modoDisparo = false;
 unsigned long inicioDisparo = 0;
 unsigned long ultimoPasoDisparo = 0;
 int pasoDisparo = 0;
+int baseCabeceoDisparo = 135;
 #define PIN_BUZZER    7   // Buzzer 2 pines (Pin 7)
 #define PIN_OLED_SDA  8   // OLED SDA (Pin 8)
 #define PIN_OLED_SCL  9   // OLED SCL (Pin 9)
@@ -495,6 +496,7 @@ void handleFiesta() {
             inicioDisparo = millis();
             ultimoPasoDisparo = 0;
             pasoDisparo = 0;
+            baseCabeceoDisparo = constrain(anguloCabeceo, 98, 172);
         }
         static unsigned long ultimaOledMs = 0;
         if (millis() - ultimaOledMs >= 250) {
@@ -508,18 +510,21 @@ void handleFiesta() {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+            moverCabeceoHW(baseCabeceoDisparo);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz)
+            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz) + cabeceo vertical únicamente
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
                 tone(PIN_BUZZER, 2400, 60);
+                moverCabeceoHW(baseCabeceoDisparo + 8);
             } else if (fase == 1) {
                 tone(PIN_BUZZER, 1900, 60);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
                 tone(PIN_BUZZER, 1400, 55);
+                moverCabeceoHW(baseCabeceoDisparo - 8);
             } else {
                 noTone(PIN_BUZZER);
             }
@@ -750,6 +755,7 @@ void loop() {
             inicioDisparo = millis();
             ultimoPasoDisparo = 0;
             pasoDisparo = 0;
+            baseCabeceoDisparo = constrain(anguloCabeceo, 98, 172);
         }
         static unsigned long ultimaOledMs = 0;
         if (millis() - ultimaOledMs >= 250) {
@@ -763,18 +769,21 @@ void loop() {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+            moverCabeceoHW(baseCabeceoDisparo);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz)
+            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz) + cabeceo vertical únicamente
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
                 tone(PIN_BUZZER, 2400, 60);
+                moverCabeceoHW(baseCabeceoDisparo + 8);
             } else if (fase == 1) {
                 tone(PIN_BUZZER, 1900, 60);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
                 tone(PIN_BUZZER, 1400, 55);
+                moverCabeceoHW(baseCabeceoDisparo - 8);
             } else {
                 noTone(PIN_BUZZER);
             }
