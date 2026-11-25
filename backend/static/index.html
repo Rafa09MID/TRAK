@@ -523,6 +523,16 @@
         <!-- VISTA 3: AJUSTES Y CONFIGURACIÓN -->
         <div id="viewAjustes" style="display:none; flex-direction:column; gap:12px;">
             <div class="card">
+                <div class="id-header" style="margin-bottom: 10px;">
+                    <span class="id-title" style="color: var(--blue);">Conexion Directa (Sin Laptop)</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <input type="text" id="directEspUrl" class="cmd-input" placeholder="http://10.11.81.248" value="http://10.11.81.248">
+                    <input type="password" id="directGeminiKey" class="cmd-input" placeholder="Gemini API Key (AIza...)">
+                    <button class="btn btn-blue" onclick="guardarConfigDirecta()">Guardar Configuracion</button>
+                </div>
+            </div>
+            <div class="card">
                 <div class="id-header" style="margin-bottom:8px;">
                     <span class="id-title" style="color:var(--text);">Enlaces de Conexion</span>
                     <span class="id-model" id="infoEspStatus">Verificando...</span>
@@ -1014,7 +1024,19 @@
         })();
 
         let barThrottle = 0;
+        function guardarConfigDirecta() {
+            localStorage.setItem('esp32_url', document.getElementById('directEspUrl').value.trim() || 'http://10.11.81.248');
+            localStorage.setItem('gemini_key', document.getElementById('directGeminiKey').value.trim());
+            alert('Configuracion guardada');
+        }
+        function getEsp32Base() {
+            return (localStorage.getItem('esp32_url') || 'http://10.11.81.248').replace(/\/$/, '');
+        }
         (function initApp() {
+            const uEl = document.getElementById('directEspUrl');
+            const kEl = document.getElementById('directGeminiKey');
+            if (uEl) uEl.value = getEsp32Base();
+            if (kEl) kEl.value = localStorage.getItem('gemini_key') || '';
             cambiarVista('control');
             if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
                 const cam = document.querySelector('.camera-box');
