@@ -731,6 +731,7 @@ void setup() {
     server.on("/api/wifi_config", HTTP_POST, handleWifiConfig);
     server.on("/api/laser/toggle", HTTP_POST, handleToggleLaser);
     server.on("/api/rect/toggle", HTTP_POST, handleToggleRect);
+    server.enableCORS(true);
     server.begin();
 
     MDNS.begin("esp32-laser");

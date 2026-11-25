@@ -653,9 +653,10 @@
                 await seleccionarLente(startIdx);
 
                 video.onloadedmetadata = () => {
+                    video.play().catch(() => {});
                     ajustarCanvas();
                     requestAnimationFrame(renderLoop);
-                    setInterval(detectarLaserFrame, 150);
+                    if (location.port === '8443') setInterval(detectarLaserFrame, 150);
                 };
             } catch (err) {
                 console.error("Error camara:", err);
@@ -692,14 +693,18 @@
 
         async function startCameraStream(deviceIndex) {
             if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-            const constraints = { video: { width: { ideal: 1920 }, height: { ideal: 1080 } } };
-            if (videoDevices.length > 0 && videoDevices[deviceIndex]) {
-                constraints.video.deviceId = { exact: videoDevices[deviceIndex].deviceId };
-            } else {
-                constraints.video.facingMode = { ideal: "environment" };
+            let stream;
+            try {
+                const constraints = { video: { facingMode: "environment" } };
+                if (videoDevices.length > 0 && videoDevices[deviceIndex]) {
+                    constraints.video = { deviceId: { exact: videoDevices[deviceIndex].deviceId } };
+                }
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (e) {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             }
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = stream;
+            await video.play().catch(() => {});
             currentTrack = stream.getVideoTracks()[0];
             ajustarCanvas();
         }
@@ -1048,7 +1053,7 @@
             if (uEl) uEl.value = getEsp32Base();
             if (kEl) kEl.value = localStorage.getItem('gemini_key') || '';
             cambiarVista('control');
-            if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            if (!('ontouchstart' in window) && window.innerWidth > 900) {
                 const cam = document.querySelector('.camera-box');
                 if (cam) cam.style.display = 'none';
             }
@@ -1725,34 +1730,38 @@
         pad.addEventListener('pointermove', (e) => { if (draggingPad) manejarEventoPad(e, false); });
         window.addEventListener('pointerup', () => { draggingPad = false; });
 
+        function espEndpoint(path) {
+            return location.port === '8443' ? `/api/esp32${path}` : `${getEsp32Base()}/api${path}`;
+        }
+
         async function centrarAreaSegura() {
-            cursor.style.left = '50%';
-            cursor.style.top = '50%';
-            document.getElementById('ctrlXY').innerText = '0.0, 0.0';
-            const res = await fetch('/api/esp32/center', { method: 'POST' });
+            cabeceoActual = 135;
+            rotacionActual = 130;
+            sincronizarBarrasEjes();
+            const res = await fetch(espEndpoint('/center'), { method: 'POST' });
             const d = await res.json();
             actualizarEstadoCtrl(d);
         }
 
         async function toggleLaser() {
-            const res = await fetch('/api/esp32/laser', { method: 'POST' });
+            const res = await fetch(espEndpoint('/laser'), { method: 'POST' });
             const data = await res.json();
             const on = !!data.laser;
-            document.getElementById('btnLaserToggle').classList.toggle('on', on);
-            document.getElementById('btnLaserCtrl').classList.toggle('on', on);
-            document.getElementById('btnLaserToggle').innerText = on ? 'Laser: ON' : 'Laser: OFF';
-            document.getElementById('btnLaserCtrl').innerText = on ? 'Laser: ON' : 'Laser: OFF';
+            const b1 = document.getElementById('btnLaserToggle');
+            const b2 = document.getElementById('btnLaserCtrl');
+            if (b1) { b1.classList.toggle('on', on); b1.innerText = on ? 'Laser: ON' : 'Laser: OFF'; }
+            if (b2) { b2.classList.toggle('on', on); b2.innerText = on ? 'Laser: ON' : 'Laser: OFF'; }
         }
 
         async function togglePatrulla() {
-            const res = await fetch('/api/esp32/rect', { method: 'POST' });
+            const res = await fetch(espEndpoint('/rect'), { method: 'POST' });
             const d = await res.json();
             actualizarEstadoCtrl(d);
         }
 
         async function cargarEstadoESP32() {
             try {
-                const res = await fetch('/api/esp32/status');
+                const res = await fetch(espEndpoint('/status'));
                 const d = await res.json();
                 actualizarEstadoCtrl(d);
             } catch (e) {}
@@ -1760,13 +1769,10 @@
 
         function actualizarEstadoCtrl(d) {
             if (!d || d.error) return;
-            if (d.cabeceo !== undefined) document.getElementById('ctrlC').innerText = d.cabeceo + '°';
-            if (d.rotacion !== undefined) document.getElementById('ctrlR').innerText = d.rotacion + '°';
-            if (d.cal) {
-                document.getElementById('padTL').innerText = `TL ${d.cal.cTL}°/${d.cal.rTL}°`;
-                document.getElementById('padTR').innerText = `TR ${d.cal.cTR}°/${d.cal.rTR}°`;
-                document.getElementById('padBL').innerText = `BL ${d.cal.cBL}°/${d.cal.rBL}°`;
-                document.getElementById('padBR').innerText = `BR ${d.cal.cBR}°/${d.cal.rBR}°`;
+            if (d.cabeceo !== undefined && d.rotacion !== undefined) {
+                cabeceoActual = d.cabeceo;
+                rotacionActual = d.rotacion;
+                sincronizarBarrasEjes();
             }
             const btnP = document.getElementById('btnPatrulla');
             if (btnP && d.rect !== undefined) {
