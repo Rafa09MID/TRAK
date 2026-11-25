@@ -1,0 +1,1823 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TRAK</title>
+    <style>
+        :root {
+            --bg: #F5F5F7;
+            --surface: #FFFFFF;
+            --surface-secondary: #F2F2F7;
+            --border: rgba(0, 0, 0, 0.08);
+            --text: #1D1D1F;
+            --text-secondary: #86868B;
+            --blue: #007AFF;
+            --green: #34C759;
+            --red: #FF3B30;
+            --indigo: #5856D6;
+            --orange: #FF9500;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* HEADER APPLE STYLE */
+        header {
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 30;
+        }
+        .logo {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.4px;
+            color: var(--text);
+        }
+        .segmented-control {
+            display: flex;
+            background: #E5E5EA;
+            padding: 3px;
+            border-radius: 10px;
+            gap: 2px;
+        }
+        .seg-btn {
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .seg-btn.active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        }
+
+        main {
+            flex: 1;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 14px 16px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* VISTA CALIBRAR */
+        #viewCalibrar { display: flex; flex-direction: column; gap: 12px; }
+        .camera-card {
+            position: relative;
+            width: 100%;
+            height: 46vh;
+            background: #000;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+        video { width: 100%; height: 100%; object-fit: cover; display: block; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
+
+        .camera-pills {
+            position: absolute;
+            top: 10px; left: 10px; right: 10px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 15;
+            pointer-events: none;
+        }
+        .pill {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            color: var(--text);
+            padding: 5px 11px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+        .pill.laser-detected {
+            background: var(--red);
+            color: #fff;
+        }
+
+        .lens-bar {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 4px;
+            border-radius: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            z-index: 16;
+        }
+        .btn-zoom {
+            background: transparent;
+            color: var(--text);
+            border: none;
+            padding: 5px 12px;
+            border-radius: 16px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-zoom.active {
+            background: var(--text);
+            color: #fff;
+        }
+
+        /* TARJETAS Y BOTONES APPLE */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+        .status-line {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.84rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+        .step-badge {
+            background: var(--surface-secondary);
+            color: var(--blue);
+            font-weight: 700;
+            font-size: 0.72rem;
+            padding: 4px 10px;
+            border-radius: 8px;
+            white-space: nowrap;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .btn {
+            padding: 13px 12px;
+            border-radius: 13px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.86rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            transition: transform 0.12s ease, opacity 0.12s ease;
+        }
+        .btn:active { transform: scale(0.97); opacity: 0.85; }
+        .btn:disabled { opacity: 0.55; cursor: default; }
+        .btn-full { grid-column: span 2; }
+        .btn-blue { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .btn-indigo { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+        .btn-green { background: var(--green); color: #fff; border-color: var(--green); }
+        .btn-red { background: var(--surface); color: var(--red); border-color: rgba(255, 59, 48, 0.25); }
+        .btn-red.on { background: var(--red); color: #fff; border-color: var(--red); }
+
+        #identifyCard {
+            display: none;
+            background: var(--surface);
+            border: 1px solid rgba(88, 86, 214, 0.25);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+        .id-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .id-title { font-size: 0.96rem; font-weight: 700; color: var(--indigo); }
+        .id-model { font-size: 0.68rem; color: var(--text-secondary); font-weight: 600; }
+        .id-desc { font-size: 0.82rem; color: var(--text); line-height: 1.4; }
+        .other-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .obj-chip {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 11px;
+            border-radius: 16px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+        }
+        .filter-bar::-webkit-scrollbar { display: none; }
+        .filter-pill {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 13px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .filter-pill.active {
+            background: var(--text);
+            color: #fff;
+            border-color: var(--text);
+        }
+        .cmd-row {
+            display: flex;
+            gap: 8px;
+        }
+        .cmd-input {
+            flex: 1;
+            padding: 11px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.84rem;
+            outline: none;
+        }
+        .cmd-input:focus { border-color: var(--blue); }
+
+        /* VISTA ÁREA SEGURA */
+        #viewControl { display: none; flex-direction: column; gap: 12px; }
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            text-align: center;
+        }
+        .metric-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px 6px;
+            box-shadow: var(--shadow);
+        }
+        .metric-box span { display: block; font-size: 0.66rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
+        .metric-box b { font-size: 1rem; color: var(--text); font-weight: 700; }
+
+        .touchpad-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            max-height: 45vh;
+            background: var(--surface);
+            border: 2px solid var(--green);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            touch-action: none;
+            cursor: crosshair;
+            margin: 0 auto;
+        }
+        .grid-lines {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+            background-size: 25% 25%;
+            pointer-events: none;
+        }
+        .crosshair-center {
+            position: absolute;
+            left: 50%; top: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            border: 1px dashed rgba(0, 0, 0, 0.25);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .corner-tag {
+            position: absolute;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            padding: 6px 8px;
+            pointer-events: none;
+        }
+        .tag-tl { top: 0; left: 0; }
+        .tag-tr { top: 0; right: 0; }
+        .tag-bl { bottom: 0; left: 0; }
+        .tag-br { bottom: 0; right: 0; }
+
+        #laserCursor {
+            position: absolute;
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            background: var(--red);
+            border: 3px solid #fff;
+            box-shadow: 0 2px 10px rgba(255, 59, 48, 0.55);
+            transform: translate(-50%, -50%);
+            left: 50%; top: 50%;
+            pointer-events: none;
+            transition: left 0.04s linear, top 0.04s linear;
+        }
+
+        .esp-link {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .esp-link a { color: var(--blue); text-decoration: none; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">TRAK</div>
+        <div class="segmented-control">
+            <button class="seg-btn" id="tabCalibrar" style="display:none;" onclick="cambiarVista('calibrar')">Calibrar</button>
+            <button class="seg-btn active" id="tabControl" onclick="cambiarVista('control')">Principal</button>
+            <button class="seg-btn" id="tabAjustes" onclick="cambiarVista('ajustes')">Ajustes</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- CAMARA COMPARTIDA EN AMBAS VISTAS -->
+        <div class="camera-card" style="height: 38vh;">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="overlayCanvas"></canvas>
+
+            <div class="camera-pills">
+                <div class="pill" id="laserStatusPill">Buscando laser</div>
+                <div class="pill" id="cornerCountPill">4 Esquinas Camara</div>
+            </div>
+
+            <div class="lens-bar" id="lensBar">
+                <button class="btn-zoom active" id="btnZoom1" onclick="seleccionarLente(0)">Cam 1</button>
+            </div>
+        </div>
+
+        <!-- VISTA 1: SOLO CALIBRACIÓN -->
+        <div id="viewCalibrar">
+            <div class="card">
+                <div class="status-line">
+                    <span class="step-badge" id="stepBadge">Manual</span>
+                    <span id="instructionText">Calibracion manual: ajusta Eje 1 y Eje 2 y captura las 4 esquinas.</span>
+                </div>
+            </div>
+
+            <div class="card" id="cornerConfirmCard" style="display:none; border-color: rgba(52, 199, 89, 0.4);">
+                <div class="id-header" style="margin-bottom: 10px;">
+                    <span class="id-title" style="color: var(--green);" id="confirmCornerTitle">Confirmar Esquina (-5, 5)</span>
+                    <span class="id-model" id="confirmAnglesText">--° / --°</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.76rem; font-weight:600; margin-bottom:4px;">
+                            <span>Eje 1 (Cabeceo)</span><span id="confValEje1">--°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(-1, 0)">-1°</button>
+                            <input type="range" id="confSliderEje1" min="0" max="180" value="115" style="flex:1; accent-color: var(--green);" oninput="moverDesdeBarra('conf', 1, this.value)">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(1, 0)">+1°</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.76rem; font-weight:600; margin-bottom:4px;">
+                            <span>Eje 2 (Rotacion)</span><span id="confValEje2">--°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(0, -1)">-1°</button>
+                            <input type="range" id="confSliderEje2" min="0" max="180" value="124" style="flex:1; accent-color: var(--green);" oninput="moverDesdeBarra('conf', 2, this.value)">
+                            <button class="btn" style="padding:6px 10px; font-size:0.76rem;" onclick="ajusteFinoEsquina(0, 1)">+1°</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="action-grid" style="grid-template-columns: 1.4fr 1fr 0.7fr; gap: 8px;">
+                    <button class="btn btn-green" id="btnConfirmCorner">Confirmar</button>
+                    <button class="btn btn-blue" id="btnRetryCorner">Reintentar</button>
+                    <button class="btn" id="btnCancelCalib">Salir</button>
+                </div>
+            </div>
+
+            <!-- MODO BARRAS EJE 1 Y EJE 2 PARA CAPTURAR LAS 4 ESQUINAS -->
+            <div class="card" id="joystickCard" style="display:block;">
+                <div class="id-header" style="margin-bottom: 10px;">
+                    <span class="id-title" style="color: var(--blue);" id="joyCornerLabel">Esquina 1/4: (-5, 5)</span>
+                    <span class="id-model" id="joyAnglesText">115° / 124°</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:14px;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:600; margin-bottom:5px;">
+                            <span>Eje 1 (Cabeceo)</span><span id="joyValEje1">115°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(-1, 0)">-1°</button>
+                            <input type="range" id="joySliderEje1" min="90" max="180" value="135" style="flex:1; accent-color: var(--blue);" oninput="moverDesdeBarra('joy', 1, this.value)">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(1, 0)">+1°</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:600; margin-bottom:5px;">
+                            <span>Eje 2 (Rotacion)</span><span id="joyValEje2">124°</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(0, -1)">-1°</button>
+                            <input type="range" id="joySliderEje2" min="80" max="180" value="130" style="flex:1; accent-color: var(--blue);" oninput="moverDesdeBarra('joy', 2, this.value)">
+                            <button class="btn" style="padding:8px 12px; font-size:0.8rem;" onclick="ajusteFinoManual(0, 1)">+1°</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="action-grid">
+                    <button class="btn btn-green" id="btnJoyCapture" onclick="capturarEsquinaJoystick()">Capturar (-5, 5)</button>
+                    <button class="btn" onclick="reiniciarJoystick()">Reiniciar 4 Esquinas</button>
+                </div>
+            </div>
+
+            <div class="action-grid">
+                <button class="btn" onclick="centrarAreaSegura()">Centro</button>
+                <button class="btn btn-red on" id="btnLaserToggle" onclick="toggleLaser()">Laser: ON</button>
+                <button class="btn btn-full" onclick="limpiarEsquinas()">Reiniciar Calibracion</button>
+            </div>
+        </div>
+
+        <!-- VISTA 2: ÁREA SEGURA (IA + IDENTIFICACIÓN + CONTROL CARTESIANO) -->
+        <div id="viewControl">
+            <button class="btn btn-indigo btn-full" id="btnIdentify" onclick="identificarYSenalar()" style="margin-bottom:12px;">Identificar con IA</button>
+
+            <div id="identifyCard">
+                <div class="id-header">
+                    <span class="id-title" id="identifyTitle">Objeto Detectado</span>
+                    <span class="id-model" id="identifyModel"></span>
+                </div>
+                <p class="id-desc" id="identifyDesc"></p>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-blue btn-full" id="btnPointIdentified" style="display:none;" onclick="apuntarObjetoIdentificado()">Apuntar con Laser</button>
+                </div>
+                <div class="other-chips" id="otherChips"></div>
+            </div>
+
+            <div class="card" style="padding:14px; margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; font-size:0.78rem; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+                    <span>Control Manual</span>
+                    <span id="joyAnglesText">Centro</span>
+                </div>
+                <div id="joySimBox" style="position:relative; width:100%; height:180px; border-radius:14px; background:#F2F2F7; border:1px solid rgba(0,0,0,0.08); overflow:hidden; touch-action:none;">
+                    <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(0,0,0,0.12);"></div>
+                    <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(0,0,0,0.12);"></div>
+                    <span style="position:absolute; top:6px; left:50%; transform:translateX(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Arriba</span>
+                    <span style="position:absolute; bottom:6px; left:50%; transform:translateX(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Abajo</span>
+                    <span style="position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Izq</span>
+                    <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Der</span>
+                    <div id="joySimDot" style="position:absolute; width:18px; height:18px; border-radius:50%; background:#007AFF; border:2.5px solid #fff; box-shadow:0 2px 8px rgba(0,122,255,0.5); left:50%; top:50%; transform:translate(-50%,-50%); transition:left 0.08s, top 0.08s;"></div>
+                </div>
+            </div>
+
+            <div class="action-grid">
+                <button class="btn btn-blue" onclick="centrarAreaSegura()">Centro</button>
+                <button class="btn btn-red on" id="btnLaserCtrl" onclick="toggleLaser()">Laser: ON</button>
+                <button class="btn btn-green btn-full" id="btnPatrulla" onclick="togglePatrulla()">Patrullar Perimetro</button>
+            </div>
+
+            <div class="esp-link">
+                Web local del dispositivo: <a href="http://esp32-laser.local" target="_blank">esp32-laser.local</a>
+            </div>
+        </div>
+
+        <!-- VISTA 3: AJUSTES Y CONFIGURACIÓN -->
+        <div id="viewAjustes" style="display:none; flex-direction:column; gap:12px;">
+            <div class="card">
+                <div class="id-header" style="margin-bottom: 10px;">
+                    <span class="id-title" style="color: var(--blue);">Conexion Directa (Sin Laptop)</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <input type="text" id="directEspUrl" class="cmd-input" placeholder="http://10.11.81.248" value="http://10.11.81.248">
+                    <input type="password" id="directGeminiKey" class="cmd-input" placeholder="Gemini API Key (AIza...)">
+                    <button class="btn btn-blue" onclick="guardarConfigDirecta()">Guardar Configuracion</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="id-header" style="margin-bottom:8px;">
+                    <span class="id-title" style="color:var(--text);">Enlaces de Conexion</span>
+                    <span class="id-model" id="infoEspStatus">Verificando...</span>
+                </div>
+                <p class="id-desc" id="infoServerLinks" style="font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">Cargando enlaces...</p>
+            </div>
+
+            <div class="card">
+                <div class="id-header" style="margin-bottom:10px;">
+                    <span class="id-title" style="color:var(--blue);">Wi-Fi del ESP32 (Hotspot Celular)</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+                    <input type="text" id="cfgWifiSsid" class="cmd-input" placeholder="Nombre de red (SSID)" value="rafa">
+                    <input type="text" id="cfgWifiPass" class="cmd-input" placeholder="Contraseña Wi-Fi" value="12345678">
+                </div>
+                <button class="btn btn-blue btn-full" onclick="guardarWifiESP32()">Guardar Wi-Fi en ESP32</button>
+            </div>
+
+            <div class="card">
+                <div class="id-header" style="margin-bottom:10px;">
+                    <span class="id-title" style="color:var(--text);">Prueba de Hardware</span>
+                </div>
+                <div class="action-grid">
+                    <button class="btn" onclick="notificarESP32('Prueba OLED OK', 'detect')">Probar OLED + Buzzer</button>
+                    <button class="btn" onclick="moverServos(90, 90, 200)">Centrar 90° / 90°</button>
+                    <button class="btn btn-full" onclick="localStorage.removeItem('trak_lens_id'); alert('Lente reiniciado.');">Reiniciar Lente Guardado</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('overlayCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let esquinas = [];
+        let areaMode = 'full'; // 'full' = 4 esquinas de la camara, 'manual' = 2 esquinas tocadas
+        let calibratedPolygon = null;
+        let registeredCornerAnims = []; // Animaciones de esquinas registradas (-5,5) etc.
+        let laserPos = { x: 0.5, y: 0.5, detected: false };
+        let cabeceoActual = 115;
+        let rotacionActual = 124;
+        let calibrando = false;
+        let detectedObject = null;
+        let jacobianMatrix = JSON.parse(localStorage.getItem('trak_jacobian') || 'null');
+
+        let videoDevices = [];
+        let currentDeviceIndex = 0;
+        let currentTrack = null;
+
+        function cambiarVista(vista) {
+            document.getElementById('viewCalibrar').style.display = vista === 'calibrar' ? 'flex' : 'none';
+            document.getElementById('viewControl').style.display = vista === 'control' ? 'flex' : 'none';
+            document.getElementById('viewAjustes').style.display = vista === 'ajustes' ? 'flex' : 'none';
+            document.getElementById('tabCalibrar').classList.toggle('active', vista === 'calibrar');
+            document.getElementById('tabControl').classList.toggle('active', vista === 'control');
+            document.getElementById('tabAjustes').classList.toggle('active', vista === 'ajustes');
+            if (vista === 'control') cargarEstadoESP32();
+            else if (vista === 'ajustes') cargarAjustes();
+            else setTimeout(ajustarCanvas, 50);
+        }
+
+        async function cargarAjustes() {
+            try {
+                const info = await fetch('/api/server_info').then(r => r.json());
+                const linksHtml = [
+                    `<strong>App Celular (mDNS):</strong> ${info.mdns_url}`,
+                    ...(info.urls || []).map(u => `<strong>App Celular (IP):</strong> ${u}`),
+                    `<strong>ESP32 detectado:</strong> ${info.esp32_url}`
+                ].join('<br>');
+                document.getElementById('infoServerLinks').innerHTML = linksHtml;
+
+                const st = await fetch('/api/esp32/status').then(r => r.json());
+                if (st && !st.error) {
+                    document.getElementById('infoEspStatus').innerText = `Conectado (${st.ip || 'OK'})`;
+                    if (st.wifi_ssid) document.getElementById('cfgWifiSsid').value = st.wifi_ssid;
+                } else {
+                    document.getElementById('infoEspStatus').innerText = 'Sin respuesta';
+                }
+            } catch (e) {}
+        }
+
+        async function guardarWifiESP32() {
+            const ssid = document.getElementById('cfgWifiSsid').value.trim();
+            const password = document.getElementById('cfgWifiPass').value;
+            if (!ssid) return;
+            const res = await fetch('/api/esp32/wifi_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ssid, password })
+            });
+            const d = await res.json();
+            if (d.saved) alert(`Wi-Fi "${ssid}" guardado en ESP32. Reconectando...`);
+            else alert('Error: ' + (d.error || 'No se pudo guardar'));
+        }
+
+        async function initCamera() {
+            try {
+                const tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                tempStream.getTracks().forEach(t => t.stop());
+
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                videoDevices = devices.filter(d => d.kind === 'videoinput');
+                const rearDevices = videoDevices.filter(d =>
+                    d.label.toLowerCase().includes('back') ||
+                    d.label.toLowerCase().includes('rear') ||
+                    d.label.toLowerCase().includes('environment')
+                );
+                if (rearDevices.length > 0) videoDevices = rearDevices;
+
+                const savedId = localStorage.getItem('trak_lens_id');
+                let startIdx = videoDevices.findIndex(d => d.deviceId === savedId);
+                if (startIdx === -1) startIdx = 0;
+
+                construirBotonesLente();
+                await seleccionarLente(startIdx);
+
+                video.onloadedmetadata = () => {
+                    ajustarCanvas();
+                    requestAnimationFrame(renderLoop);
+                    setInterval(detectarLaserFrame, 150);
+                };
+            } catch (err) {
+                console.error("Error camara:", err);
+            }
+        }
+
+        function construirBotonesLente() {
+            const bar = document.getElementById('lensBar');
+            bar.innerHTML = "";
+            if (videoDevices.length === 0) {
+                bar.innerHTML = '<button class="btn-zoom active">Cam 1</button>';
+                return;
+            }
+            videoDevices.forEach((d, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-zoom' + (idx === currentDeviceIndex ? ' active' : '');
+                btn.id = `lensBtn_${idx}`;
+                btn.innerText = `Cam ${idx + 1}`;
+                btn.onclick = () => seleccionarLente(idx);
+                bar.appendChild(btn);
+            });
+        }
+
+        async function seleccionarLente(idx) {
+            currentDeviceIndex = idx;
+            document.querySelectorAll('#lensBar .btn-zoom').forEach((b, i) => {
+                b.classList.toggle('active', i === idx);
+            });
+            if (videoDevices[idx]) {
+                localStorage.setItem('trak_lens_id', videoDevices[idx].deviceId);
+            }
+            await startCameraStream(idx);
+        }
+
+        async function startCameraStream(deviceIndex) {
+            if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+            const constraints = { video: { width: { ideal: 1920 }, height: { ideal: 1080 } } };
+            if (videoDevices.length > 0 && videoDevices[deviceIndex]) {
+                constraints.video.deviceId = { exact: videoDevices[deviceIndex].deviceId };
+            } else {
+                constraints.video.facingMode = { ideal: "environment" };
+            }
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            currentTrack = stream.getVideoTracks()[0];
+            ajustarCanvas();
+        }
+
+        function ajustarCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', ajustarCanvas);
+
+        function setAreaMode(mode) {
+            areaMode = mode;
+            document.getElementById('modeFullBtn').classList.toggle('active', mode === 'full');
+            document.getElementById('modeJoystickBtn').classList.toggle('active', mode === 'joystick');
+
+            const isJoy = mode === 'joystick';
+            document.getElementById('joystickCard').style.display = isJoy ? 'block' : 'none';
+            document.getElementById('btnAutoCalibrar').style.display = isJoy ? 'none' : 'block';
+
+            if (isJoy) reiniciarJoystick();
+            actualizarUIEsquinas();
+        }
+
+        function actualizarUIEsquinas() {
+            if (areaMode === 'full') {
+                document.getElementById('cornerCountPill').innerText = "4 Esquinas Camara";
+                document.getElementById('stepBadge').innerText = "Listo";
+                document.getElementById('instructionText').innerText = "Usando las 4 esquinas de la camara. Pulsa Auto-Calibrar.";
+                return;
+            }
+            document.getElementById('cornerCountPill').innerText = `Esquinas: ${esquinas.length} / 2`;
+            if (esquinas.length === 0) {
+                document.getElementById('stepBadge').innerText = "Paso 1";
+                document.getElementById('instructionText').innerText = "Toca 2 esquinas opuestas para marcar el Area Segura.";
+            } else if (esquinas.length === 1) {
+                document.getElementById('stepBadge').innerText = "Paso 2";
+                document.getElementById('instructionText').innerText = "Toca la esquina opuesta para cerrar el rectangulo.";
+            } else {
+                document.getElementById('stepBadge').innerText = "Listo";
+                document.getElementById('instructionText').innerText = "Area marcada. Pulsa Auto-Calibrar para alinear.";
+            }
+        }
+
+        function limpiarEsquinas() {
+            esquinas = [];
+            calibratedPolygon = null;
+            registeredCornerAnims = [];
+            detectedObject = null;
+            document.getElementById('identifyCard').style.display = 'none';
+            actualizarUIEsquinas();
+        }
+
+        function obtenerRectanguloObjetivo() {
+            if (areaMode === 'full') {
+                return {
+                    TL: { x: 0.12, y: 0.10 },
+                    TR: { x: 0.88, y: 0.10 },
+                    BR: { x: 0.88, y: 0.82 },
+                    BL: { x: 0.12, y: 0.82 },
+                    center: { x: 0.5, y: 0.46 }
+                };
+            }
+            if (esquinas.length < 2) return null;
+            const xMin = Math.min(esquinas[0].x, esquinas[1].x);
+            const xMax = Math.max(esquinas[0].x, esquinas[1].x);
+            const yMin = Math.min(esquinas[0].y, esquinas[1].y);
+            const yMax = Math.max(esquinas[0].y, esquinas[1].y);
+            return {
+                TL: { x: xMin, y: yMin },
+                TR: { x: xMax, y: yMin },
+                BR: { x: xMax, y: yMax },
+                BL: { x: xMin, y: yMax },
+                center: { x: (xMin + xMax) / 2, y: (yMin + yMax) / 2 }
+            };
+        }
+
+        function capturarFrameBase64(width = 480) {
+            const snap = document.createElement('canvas');
+            snap.width = width;
+            snap.height = Math.round(width * (canvas.clientHeight / canvas.clientWidth));
+            const sCtx = snap.getContext('2d');
+            sCtx.drawImage(video, 0, 0, snap.width, snap.height);
+            return snap.toDataURL('image/jpeg', 0.78);
+        }
+
+        async function detectarLaserFrame() {
+            if (video.videoWidth === 0 || video.clientWidth === 0) return;
+            try {
+                const res = await fetch('/api/detect_laser', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(480) })
+                });
+                const data = await res.json();
+                laserPos.detected = data.detected;
+                const p = document.getElementById('laserStatusPill');
+                if (data.detected) {
+                    laserPos.x = data.x;
+                    laserPos.y = data.y;
+                    p.innerText = `Laser: ${Math.round(data.x*100)}%, ${Math.round(data.y*100)}%`;
+                    p.classList.add('laser-detected');
+                } else {
+                    p.innerText = 'Buscando laser';
+                    p.classList.remove('laser-detected');
+                }
+            } catch (err) {}
+        }
+
+        function renderLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (calibratedPolygon && calibratedPolygon.length === 4) {
+                ctx.beginPath();
+                ctx.moveTo(calibratedPolygon[0][0] * canvas.width, calibratedPolygon[0][1] * canvas.height);
+                for (let i = 1; i < 4; i++) {
+                    ctx.lineTo(calibratedPolygon[i][0] * canvas.width, calibratedPolygon[i][1] * canvas.height);
+                }
+                ctx.closePath();
+                ctx.fillStyle = "rgba(52, 199, 89, 0.16)";
+                ctx.fill();
+                ctx.strokeStyle = "#34C759";
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            } else {
+                const rectArea = obtenerRectanguloObjetivo();
+                if (rectArea) {
+                    const x1 = rectArea.TL.x * canvas.width;
+                    const y1 = rectArea.TL.y * canvas.height;
+                    const w = (rectArea.TR.x - rectArea.TL.x) * canvas.width;
+                    const h = (rectArea.BL.y - rectArea.TL.y) * canvas.height;
+
+                    ctx.fillStyle = "rgba(52, 199, 89, 0.14)";
+                    ctx.fillRect(x1, y1, w, h);
+                    ctx.strokeStyle = "#34C759";
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash(areaMode === 'full' ? [6, 4] : []);
+                    ctx.strokeRect(x1, y1, w, h);
+                    ctx.setLineDash([]);
+                }
+            }
+
+            esquinas.forEach((pt, idx) => {
+                const px = pt.x * canvas.width;
+                const py = pt.y * canvas.height;
+                ctx.beginPath();
+                ctx.arc(px, py, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = "#34C759";
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // Animacion de flecha / palomita y coordenada cartesiana en esquinas registradas
+            const nowMs = Date.now();
+            registeredCornerAnims.forEach(anim => {
+                const ax = anim.x * canvas.width;
+                const ay = anim.y * canvas.height;
+                const elapsed = Math.min(1.0, (nowMs - anim.startTime) / 700.0);
+                const pulseRadius = 12 + elapsed * 18;
+                const alpha = 1.0 - elapsed * 0.7;
+
+                // Anillo expansivo verde Apple
+                ctx.beginPath();
+                ctx.arc(ax, ay, pulseRadius, 0, 2 * Math.PI);
+                ctx.strokeStyle = `rgba(52, 199, 89, ${alpha})`;
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                // Circulo solido + palomita de confirmacion
+                ctx.beginPath();
+                ctx.arc(ax, ay, 11, 0, 2 * Math.PI);
+                ctx.fillStyle = "#34C759";
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Palomita blanca (checkmark)
+                ctx.beginPath();
+                ctx.moveTo(ax - 5, ay);
+                ctx.lineTo(ax - 1, ay + 4);
+                ctx.lineTo(ax + 5, ay - 4);
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2.2;
+                ctx.lineCap = "round";
+                ctx.stroke();
+
+                // Etiqueta (-5, 5)
+                ctx.font = "700 11px -apple-system, sans-serif";
+                const lblW = ctx.measureText(anim.label).width + 10;
+                const lxPos = Math.min(canvas.width - lblW - 4, Math.max(4, ax - lblW / 2));
+                const lyPos = ay < 30 ? ay + 16 : ay - 28;
+                ctx.fillStyle = "rgba(29, 29, 31, 0.85)";
+                ctx.fillRect(lxPos, lyPos, lblW, 18);
+                ctx.fillStyle = "#fff";
+                ctx.fillText(anim.label, lxPos + 5, lyPos + 13);
+            });
+
+            if (laserPos.detected) {
+                const lx = laserPos.x * canvas.width;
+                const ly = laserPos.y * canvas.height;
+                ctx.beginPath();
+                ctx.arc(lx, ly, 15, 0, 2 * Math.PI);
+                ctx.strokeStyle = "#FF3B30";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(lx - 8, ly); ctx.lineTo(lx + 8, ly);
+                ctx.moveTo(lx, ly - 8); ctx.lineTo(lx, ly + 8);
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            if (detectedObject) {
+                const [ymin, xmin, ymax, xmax] = detectedObject.box || [0.4, 0.4, 0.6, 0.6];
+                const bx = xmin * canvas.width;
+                const by = ymin * canvas.height;
+                const bw = (xmax - xmin) * canvas.width;
+                const bh = (ymax - ymin) * canvas.height;
+
+                ctx.strokeStyle = "#5856D6";
+                ctx.lineWidth = 2.5;
+                ctx.strokeRect(bx, by, bw, bh);
+
+                const tx = detectedObject.target_x * canvas.width;
+                const ty = detectedObject.target_y * canvas.height;
+                ctx.beginPath();
+                ctx.arc(tx, ty, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = "#5856D6";
+                ctx.fill();
+
+                ctx.font = "600 12px -apple-system, sans-serif";
+                const textW = ctx.measureText(detectedObject.objeto).width + 16;
+                ctx.fillStyle = "#5856D6";
+                ctx.fillRect(bx, Math.max(0, by - 24), Math.min(240, textW), 24);
+                ctx.fillStyle = "#fff";
+                ctx.fillText(detectedObject.objeto, bx + 8, Math.max(16, by - 8));
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        async function medirPosicionLaser() {
+            const res = await fetch('/api/detect_laser', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_base64: capturarFrameBase64(480) })
+            });
+            const data = await res.json();
+            laserPos.detected = data.detected;
+            if (data.detected) {
+                laserPos.x = data.x;
+                laserPos.y = data.y;
+            }
+            return data;
+        }
+
+        async function moverServos(cab, rot, waitMs = 580) {
+            cabeceoActual = Math.max(0, Math.min(180, Math.round(cab)));
+            rotacionActual = Math.max(0, Math.min(180, Math.round(rot)));
+            await fetch('/api/esp32/servo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
+            });
+            await new Promise(r => setTimeout(r, waitMs));
+        }
+
+        let confirmResolver = null;
+
+        function sincronizarBarrasEjes() {
+            const angTxt = `${cabeceoActual}° / ${rotacionActual}°`;
+            const cS1 = document.getElementById('confSliderEje1');
+            const cS2 = document.getElementById('confSliderEje2');
+            const jS1 = document.getElementById('joySliderEje1');
+            const jS2 = document.getElementById('joySliderEje2');
+            if (cS1) { cS1.value = cabeceoActual; document.getElementById('confValEje1').innerText = cabeceoActual + '°'; }
+            if (cS2) { cS2.value = rotacionActual; document.getElementById('confValEje2').innerText = rotacionActual + '°'; }
+            const pctCab = Math.round(((cabeceoActual - 90) / 90) * 100);
+            const lblCab = pctCab <= 2 ? 'Abajo (0%)' : `Arriba ${pctCab}%`;
+            const diffRot = rotacionActual - 130;
+            const lblRot = Math.abs(diffRot) <= 2 ? 'Centro' : (diffRot < 0 ? `Izq ${Math.round((-diffRot / 50) * 100)}%` : `Der ${Math.round((diffRot / 50) * 100)}%`);
+            if (jS1) { jS1.value = cabeceoActual; document.getElementById('joyValEje1').innerText = lblCab; }
+            if (jS2) { jS2.value = rotacionActual; document.getElementById('joyValEje2').innerText = lblRot; }
+            document.getElementById('confirmAnglesText').innerText = `${lblCab} · ${lblRot}`;
+            document.getElementById('joyAnglesText').innerText = `${lblCab} · ${lblRot}`;
+            const simDot = document.getElementById('joySimDot');
+            if (simDot) {
+                const xPct = Math.max(0, Math.min(100, ((rotacionActual - 80) / 100) * 100));
+                const yPct = Math.max(0, Math.min(100, 100 - ((cabeceoActual - 90) / 90) * 100));
+                simDot.style.left = xPct + '%';
+                simDot.style.top = yPct + '%';
+            }
+        }
+
+        (function initJoySim() {
+            const box = document.getElementById('joySimBox');
+            if (!box) return;
+            let dragging = false;
+            const moveFromEvent = (e) => {
+                const r = box.getBoundingClientRect();
+                const nx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+                const ny = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+                rotacionActual = Math.round(80 + nx * 100);
+                cabeceoActual = Math.round(90 + (1 - ny) * 90);
+                sincronizarBarrasEjes();
+                const now = Date.now();
+                if (now - barThrottle < 55) return;
+                barThrottle = now;
+                fetch('/api/esp32/servo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
+                }).catch(() => {});
+            };
+            box.addEventListener('pointerdown', (e) => { dragging = true; box.setPointerCapture(e.pointerId); moveFromEvent(e); });
+            box.addEventListener('pointermove', (e) => { if (dragging) moveFromEvent(e); });
+            box.addEventListener('pointerup', () => { dragging = false; });
+            box.addEventListener('pointercancel', () => { dragging = false; });
+        })();
+
+        let barThrottle = 0;
+        function guardarConfigDirecta() {
+            localStorage.setItem('esp32_url', document.getElementById('directEspUrl').value.trim() || 'http://10.11.81.248');
+            localStorage.setItem('gemini_key', document.getElementById('directGeminiKey').value.trim());
+            alert('Configuracion guardada');
+        }
+        function getEsp32Base() {
+            return (localStorage.getItem('esp32_url') || 'http://10.11.81.248').replace(/\/$/, '');
+        }
+        (function initApp() {
+            const uEl = document.getElementById('directEspUrl');
+            const kEl = document.getElementById('directGeminiKey');
+            if (uEl) uEl.value = getEsp32Base();
+            if (kEl) kEl.value = localStorage.getItem('gemini_key') || '';
+            cambiarVista('control');
+            if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                const cam = document.querySelector('.camera-box');
+                if (cam) cam.style.display = 'none';
+            }
+        })();
+        function moverDesdeBarra(prefix, eje, valStr) {
+            const val = parseInt(valStr, 10);
+            if (eje === 1) cabeceoActual = val;
+            else rotacionActual = val;
+            sincronizarBarrasEjes();
+
+            const now = Date.now();
+            if (now - barThrottle < 55) return;
+            barThrottle = now;
+            fetch('/api/esp32/servo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
+            }).catch(() => {});
+        }
+
+        async function ajusteFinoEsquina(dCab, dRot) {
+            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 120);
+            sincronizarBarrasEjes();
+        }
+
+        async function ajusteFinoManual(dCab, dRot) {
+            await moverServos(cabeceoActual + dCab, rotacionActual + dRot, 120);
+            sincronizarBarrasEjes();
+        }
+
+        function esperarConfirmacionUsuario(coordLabel) {
+            return new Promise((resolve) => {
+                const card = document.getElementById('cornerConfirmCard');
+                card.style.display = 'block';
+                document.getElementById('confirmCornerTitle').innerText = `Confirmar Esquina ${coordLabel}`;
+                document.getElementById('btnConfirmCorner').innerText = `Confirmar ${coordLabel}`;
+                sincronizarBarrasEjes();
+
+                confirmResolver = resolve;
+                document.getElementById('btnConfirmCorner').onclick = () => {
+                    card.style.display = 'none';
+                    resolve('confirm');
+                };
+                document.getElementById('btnRetryCorner').onclick = () => {
+                    card.style.display = 'none';
+                    resolve('retry');
+                };
+                document.getElementById('btnCancelCalib').onclick = () => {
+                    card.style.display = 'none';
+                    resolve('cancel');
+                };
+            });
+        }
+
+        async function autoCalibrar() {
+            const rectArea = obtenerRectanguloObjetivo();
+            if (!rectArea) {
+                alert("Toca 2 esquinas opuestas en la camara primero o selecciona Toda la Camara.");
+                return;
+            }
+
+            calibrando = true;
+            calibratedPolygon = null;
+            registeredCornerAnims = [];
+            jacobianMatrix = null;
+            localStorage.removeItem('trak_jacobian');
+
+            document.getElementById('stepBadge').innerText = "Fase 1";
+            document.getElementById('instructionText').innerText = "Localizando laser dentro de la camara...";
+
+            // 1. Obtener posicion real actual del ESP32
+            try {
+                const st = await fetch('/api/esp32/status').then(r => r.json());
+                if (st.cabeceo !== undefined) cabeceoActual = st.cabeceo;
+                if (st.rotacion !== undefined) rotacionActual = st.rotacion;
+            } catch (e) {}
+
+            // Verificar si el laser ya esta visible en la posicion actual
+            let p0 = await medirPosicionLaser();
+            if (!p0.detected) {
+                const busquedas = [[110, 120], [95, 120], [125, 120], [110, 100], [110, 140], [90, 90], [120, 90]];
+                for (const [bc, br] of busquedas) {
+                    await moverServos(bc, br, 600);
+                    p0 = await medirPosicionLaser();
+                    if (p0.detected) break;
+                }
+            }
+
+            if (!p0.detected) {
+                calibrando = false;
+                alert("No se detecta el laser en la camara. Apunta hacia el punto rojo e intenta de nuevo.");
+                actualizarUIEsquinas();
+                return;
+            }
+
+            // Punto ancla seguro donde sabemos al 100% que el laser esta dentro de la camara
+            const safeCab = cabeceoActual;
+            const safeRot = rotacionActual;
+
+            document.getElementById('instructionText').innerText = "Midiendo direccion de ejes...";
+
+            // 2. Probar Rotacion (+8° o -8°) con 650ms de asentamiento
+            let dRot = safeRot > 160 ? -8 : 8;
+            await moverServos(safeCab, safeRot + dRot, 650);
+            let pRot = await medirPosicionLaser();
+            if (!pRot.detected) {
+                await moverServos(safeCab, safeRot, 650);
+                dRot = -dRot;
+                await moverServos(safeCab, safeRot + dRot, 650);
+                pRot = await medirPosicionLaser();
+            }
+            await moverServos(safeCab, safeRot, 650);
+
+            // 3. Probar Cabeceo (+8° o -8°) con 650ms de asentamiento
+            let dCab = safeCab > 160 ? -8 : 8;
+            await moverServos(safeCab + dCab, safeRot, 650);
+            let pCab = await medirPosicionLaser();
+            if (!pCab.detected) {
+                await moverServos(safeCab, safeRot, 650);
+                dCab = -dCab;
+                await moverServos(safeCab + dCab, safeRot, 650);
+                pCab = await medirPosicionLaser();
+            }
+            await moverServos(safeCab, safeRot, 650);
+
+            if (pRot.detected && pCab.detected) {
+                const jCandidate = {
+                    dx_drot: (pRot.x - p0.x) / dRot,
+                    dy_drot: (pRot.y - p0.y) / dRot,
+                    dx_dcab: (pCab.x - p0.x) / dCab,
+                    dy_dcab: (pCab.y - p0.y) / dCab
+                };
+                const det = jCandidate.dx_dcab * jCandidate.dy_drot - jCandidate.dx_drot * jCandidate.dy_dcab;
+                if (Math.abs(det) > 1e-5) {
+                    jacobianMatrix = jCandidate;
+                    localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
+                }
+            }
+            const jActive = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
+
+            const targets = [
+                { key: "TL", name: "Superior Izquierda (-5, 5)", coordLabel: "(-5, 5)", pt: rectArea.TL },
+                { key: "TR", name: "Superior Derecha (5, 5)", coordLabel: "(5, 5)", pt: rectArea.TR },
+                { key: "BR", name: "Inferior Derecha (5, -5)", coordLabel: "(5, -5)", pt: rectArea.BR },
+                { key: "BL", name: "Inferior Izquierda (-5, -5)", coordLabel: "(-5, -5)", pt: rectArea.BL }
+            ];
+            const cal = {};
+            const camCorners = [];
+
+            for (let i = 0; i < targets.length; i++) {
+                const t = targets[i];
+                document.getElementById('stepBadge').innerText = `${i+1} / 4`;
+                document.getElementById('instructionText').innerText = `Alineando: ${t.name}`;
+
+                // Verificar que el laser sea visible antes de empezar esta esquina; si no, volver al ancla segura
+                let checkStart = await medirPosicionLaser();
+                if (!checkStart.detected) {
+                    await moverServos(safeCab, safeRot, 650);
+                    checkStart = await medirPosicionLaser();
+                }
+
+                let lastValidCab = cabeceoActual;
+                let lastValidRot = rotacionActual;
+                let lastLx = checkStart.detected ? checkStart.x : t.pt.x;
+                let lastLy = checkStart.detected ? checkStart.y : t.pt.y;
+                let stepGain = 0.55;
+                let stepMax = 6;
+                let lostCount = 0;
+
+                for (let step = 0; step < 16; step++) {
+                    const res = await fetch('/api/align_step', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_base64: capturarFrameBase64(480),
+                            target_x: t.pt.x,
+                            target_y: t.pt.y,
+                            cabeceo_actual: cabeceoActual,
+                            rotacion_actual: rotacionActual,
+                            gain: stepGain,
+                            max_step: stepMax,
+                            ...jActive
+                        })
+                    });
+                    const d = await res.json();
+
+                    if (d.status === "laser_not_found") {
+                        lostCount++;
+                        laserPos.detected = false;
+                        document.getElementById('instructionText').innerText = `Regresando laser al area visible (${t.name})...`;
+                        if (lostCount >= 2) {
+                            // Si sigue perdido tras regresar al ultimo valido, volver directo al ancla segura
+                            await moverServos(safeCab, safeRot, 650);
+                        } else {
+                            await moverServos(lastValidCab, lastValidRot, 600);
+                        }
+                        stepGain = Math.max(0.25, stepGain * 0.55);
+                        stepMax = Math.max(2, Math.floor(stepMax * 0.6));
+                        continue;
+                    }
+
+                    lostCount = 0;
+                    lastValidCab = cabeceoActual;
+                    lastValidRot = rotacionActual;
+                    lastLx = d.laser_x;
+                    lastLy = d.laser_y;
+                    laserPos.detected = true;
+                    laserPos.x = d.laser_x;
+                    laserPos.y = d.laser_y;
+
+                    if (d.alineado) break;
+
+                    if (d.nuevo_cabeceo !== undefined) {
+                        cabeceoActual = d.nuevo_cabeceo;
+                        rotacionActual = d.nueva_rotacion;
+                    }
+                    await new Promise(r => setTimeout(r, 550));
+                }
+
+                // Esperar confirmacion manual del usuario (con ajuste fino, reintentar o salir)
+                document.getElementById('stepBadge').innerText = `Confirmar ${i+1}/4`;
+                document.getElementById('instructionText').innerText = `Verifica la esquina ${t.coordLabel} y pulsa Confirmar o Reintentar.`;
+                const accion = await esperarConfirmacionUsuario(t.coordLabel);
+                if (accion === 'retry') {
+                    i--; // Volver a intentar exactamente esta misma esquina
+                    continue;
+                }
+                if (accion === 'cancel') {
+                    calibrando = false;
+                    actualizarUIEsquinas();
+                    return;
+                }
+
+                // Confirmar posicion final visible tras confirmacion/ajuste del usuario
+                const finalCheck = await medirPosicionLaser();
+                if (finalCheck.detected) {
+                    lastLx = finalCheck.x;
+                    lastLy = finalCheck.y;
+                }
+
+                cal[`c${t.key}`] = cabeceoActual;
+                cal[`r${t.key}`] = rotacionActual;
+                camCorners.push([lastLx, lastLy]);
+
+                // Disparar animacion de flecha / palomita de esquina registrada y notificar OLED + Buzzer
+                notificarESP32(`Esquina ${t.coordLabel}`, 'confirm');
+                registeredCornerAnims.push({
+                    x: lastLx,
+                    y: lastLy,
+                    label: t.coordLabel,
+                    startTime: Date.now()
+                });
+            }
+
+            calibratedPolygon = camCorners;
+
+            document.getElementById('stepBadge').innerText = "Verificando";
+            document.getElementById('instructionText').innerText = "Calculando Homografia 3x3 y verificando centro...";
+
+            await fetch('/api/calibrate_homography', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cam_corners: camCorners, servo_corners: cal })
+            });
+
+            await fetch('/api/esp32/center', { method: 'POST' });
+            await new Promise(r => setTimeout(r, 450));
+
+            const verRes = await fetch('/api/verify_calibration', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_base64: capturarFrameBase64(480) })
+            });
+            const ver = await verRes.json();
+
+            calibrando = false;
+            document.getElementById('stepBadge').innerText = ver.verified ? "Verificado" : "Listo";
+            document.getElementById('instructionText').innerText = ver.verified
+                ? `Area Segura verificada (error ${ver.error_pct}%).`
+                : "Area Segura calibrada y guardada.";
+            cambiarVista('control');
+        }
+
+        async function apuntarAObjetivo(targetX, targetY, label) {
+            calibrando = true;
+            document.getElementById('stepBadge').innerText = "Apuntando";
+            document.getElementById('instructionText').innerText = `Señalando: ${label}`;
+
+            if (!jacobianMatrix) {
+                const p0 = await medirPosicionLaser();
+                if (p0.detected) {
+                    const baseCab = cabeceoActual;
+                    const baseRot = rotacionActual;
+                    const dRot = baseRot > 150 ? -12 : 12;
+                    const dCab = baseCab > 150 ? -12 : 12;
+                    await moverServos(baseCab, baseRot + dRot);
+                    const pRot = await medirPosicionLaser();
+                    await moverServos(baseCab + dCab, baseRot);
+                    const pCab = await medirPosicionLaser();
+                    jacobianMatrix = {
+                        dx_drot: (pRot.x - p0.x) / dRot,
+                        dy_drot: (pRot.y - p0.y) / dRot,
+                        dx_dcab: (pCab.x - p0.x) / dCab,
+                        dy_dcab: (pCab.y - p0.y) / dCab
+                    };
+                    localStorage.setItem('trak_jacobian', JSON.stringify(jacobianMatrix));
+                    await moverServos(baseCab, baseRot);
+                }
+            }
+
+            const j = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
+            for (let step = 0; step < 8; step++) {
+                const res = await fetch('/api/align_step', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_base64: capturarFrameBase64(480),
+                        target_x: targetX,
+                        target_y: targetY,
+                        cabeceo_actual: cabeceoActual,
+                        rotacion_actual: rotacionActual,
+                        ...j
+                    })
+                });
+                const d = await res.json();
+                if (d.nuevo_cabeceo !== undefined) {
+                    cabeceoActual = d.nuevo_cabeceo;
+                    rotacionActual = d.nueva_rotacion;
+                }
+                if (d.alineado) break;
+                await new Promise(r => setTimeout(r, 360));
+            }
+
+            calibrando = false;
+            document.getElementById('stepBadge').innerText = "Señalado";
+            document.getElementById('instructionText').innerText = `Laser apuntando a: ${label}`;
+        }
+
+        async function identificarYSenalar() {
+            const btn = document.getElementById('btnIdentify');
+            const card = document.getElementById('identifyCard');
+            btn.disabled = true;
+            btn.innerText = "Analizando escena...";
+            document.getElementById('stepBadge').innerText = "IA";
+            document.getElementById('instructionText').innerText = "Identificando objetos en vision...";
+
+            try {
+                const res = await fetch('/api/identify_and_point', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(640) })
+                });
+                const d = await res.json();
+                if (d.error) {
+                    alert("Error IA: " + d.error);
+                    actualizarUIEsquinas();
+                    return;
+                }
+
+                detectedObject = {
+                    objeto: d.objeto,
+                    target_x: d.target_x,
+                    target_y: d.target_y,
+                    box: d.box
+                };
+
+                card.style.display = 'block';
+                document.getElementById('identifyTitle').innerText = d.objeto;
+                document.getElementById('identifyModel').innerText = d.model || "";
+                document.getElementById('identifyDesc').innerText = d.descripcion || "";
+
+                const btnPtr = document.getElementById('btnPointIdentified');
+                try {
+                    const sa = await fetch('/api/safe_area').then(r => r.json());
+                    if (sa && sa.homography) {
+                        btnPtr.style.display = 'block';
+                        btnPtr.innerText = `Apuntar a: ${d.objeto}`;
+                    } else {
+                        btnPtr.style.display = 'none';
+                    }
+                } catch (e) {
+                    btnPtr.style.display = 'none';
+                }
+
+                const chips = document.getElementById('otherChips');
+                chips.innerHTML = "";
+                if (d.otros && d.otros.length > 0) {
+                    d.otros.forEach(o => {
+                        const btnChip = document.createElement('button');
+                        btnChip.className = 'obj-chip';
+                        btnChip.innerText = o.nombre;
+                        btnChip.onclick = () => {
+                            detectedObject = { objeto: o.nombre, target_x: o.x, target_y: o.y, box: o.box };
+                            document.getElementById('identifyTitle').innerText = o.nombre;
+                            if (btnPtr.style.display !== 'none') btnPtr.innerText = `Apuntar a: ${o.nombre}`;
+                        };
+                        chips.appendChild(btnChip);
+                    });
+                }
+
+                document.getElementById('stepBadge').innerText = "Listo";
+                document.getElementById('instructionText').innerText = `Detectado: ${d.objeto}`;
+            } catch (e) {
+                alert("Error de conexion: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Identificar con IA";
+            }
+        }
+
+        async function apuntarObjetoIdentificado() {
+            if (!detectedObject) return;
+            await apuntarDirectoOHibrido(detectedObject.target_x, detectedObject.target_y, detectedObject.objeto);
+        }
+
+        async function apuntarDirectoOHibrido(x, y, label) {
+            let jumped = false;
+            try {
+                const res = await fetch('/api/point_camera_xy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x, y })
+                });
+                if (res.ok) {
+                    const d = await res.json();
+                    if (d.pointed && d.esp32) {
+                        jumped = true;
+                        if (d.esp32.cabeceo !== undefined) cabeceoActual = d.esp32.cabeceo;
+                        if (d.esp32.rotacion !== undefined) rotacionActual = d.esp32.rotacion;
+                        if (d.u !== undefined && d.v !== undefined) {
+                            cursor.style.left = (d.u * 100) + '%';
+                            cursor.style.top = (d.v * 100) + '%';
+                            document.getElementById('ctrlXY').innerText = uvACartesiano(d.u, d.v);
+                        }
+                        actualizarEstadoCtrl(d.esp32);
+                        await new Promise(r => setTimeout(r, 480));
+                    }
+                }
+            } catch (e) {}
+
+            // Refinamiento visual en lazo cerrado (hasta 4 pasos suaves) para clavar el centro del objeto
+            const j = jacobianMatrix || { dx_dcab: 0, dx_drot: 0, dy_dcab: 0, dy_drot: 0 };
+            for (let step = 0; step < (jumped ? 4 : 7); step++) {
+                try {
+                    const res = await fetch('/api/align_step', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_base64: capturarFrameBase64(480),
+                            target_x: x,
+                            target_y: y,
+                            cabeceo_actual: cabeceoActual,
+                            rotacion_actual: rotacionActual,
+                            gain: 0.6,
+                            max_step: 6,
+                            ...j
+                        })
+                    });
+                    const d = await res.json();
+                    if (d.status === "laser_not_found") break;
+                    if (d.nuevo_cabeceo !== undefined) {
+                        cabeceoActual = d.nuevo_cabeceo;
+                        rotacionActual = d.nueva_rotacion;
+                    }
+                    if (d.alineado) break;
+                    await new Promise(r => setTimeout(r, 420));
+                } catch (e) { break; }
+            }
+            cargarEstadoESP32();
+        }
+
+        async function buscarColorLocal(colorFiltro) {
+            document.querySelectorAll('.filter-pill').forEach(p => {
+                p.classList.toggle('active', p.innerText.toLowerCase().includes(colorFiltro.toLowerCase()) || (colorFiltro === 'Todas' && p.innerText === 'Detectar Todo'));
+            });
+            document.getElementById('stepBadge').innerText = "OpenCV";
+            document.getElementById('instructionText').innerText = `Buscando (${colorFiltro}) localmente...`;
+
+            try {
+                const res = await fetch('/api/detect_objects_local', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(480) })
+                });
+                const d = await res.json();
+                let lista = d.objects || [];
+                if (colorFiltro !== 'Todas') {
+                    lista = lista.filter(o => o.color.toLowerCase() === colorFiltro.toLowerCase());
+                }
+
+                const card = document.getElementById('identifyCard');
+                card.style.display = 'block';
+                document.getElementById('identifyModel').innerText = `OpenCV CIELAB (${d.ms} ms)`;
+                const chips = document.getElementById('otherChips');
+                chips.innerHTML = "";
+
+                if (lista.length === 0) {
+                    detectedObject = null;
+                    document.getElementById('identifyTitle').innerText = `Sin coincidencias (${colorFiltro})`;
+                    document.getElementById('identifyDesc').innerText = `Objetos totales visibles: ${d.count}.`;
+                    document.getElementById('stepBadge').innerText = "0";
+                    document.getElementById('instructionText').innerText = `No se encontraron objetos ${colorFiltro}.`;
+                    return;
+                }
+
+                const top = lista[0];
+                notificarESP32(top.nombre, 'detect');
+                detectedObject = { objeto: top.nombre, target_x: top.x, target_y: top.y, box: top.box };
+                document.getElementById('identifyTitle').innerText = `${top.nombre} (${lista.length} encontrados)`;
+                document.getElementById('identifyDesc').innerText = `Detectado localmente en ${d.ms} ms. Toca cualquier etiqueta para señalar:`;
+
+                lista.slice(0, 6).forEach((o, idx) => {
+                    const btnChip = document.createElement('button');
+                    btnChip.className = 'obj-chip';
+                    btnChip.innerText = `${o.color} #${idx + 1}`;
+                    btnChip.onclick = () => {
+                        detectedObject = { objeto: o.nombre, target_x: o.x, target_y: o.y, box: o.box };
+                        document.getElementById('identifyTitle').innerText = `${o.nombre} (#${idx + 1})`;
+                        apuntarDirectoOHibrido(o.x, o.y, `${o.color} #${idx + 1}`);
+                    };
+                    chips.appendChild(btnChip);
+                });
+
+                await apuntarDirectoOHibrido(top.x, top.y, top.nombre);
+            } catch (e) {
+                alert("Error deteccion local: " + e.message);
+            }
+        }
+
+        async function enviarComando() {
+            const input = document.getElementById('cmdInput');
+            const cmd = input.value.trim();
+            if (!cmd) return;
+
+            document.getElementById('stepBadge').innerText = "Comando";
+            document.getElementById('instructionText').innerText = `Procesando: "${cmd}"...`;
+
+            try {
+                const res = await fetch('/api/command_point', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_base64: capturarFrameBase64(640), command: cmd })
+                });
+                const d = await res.json();
+                const card = document.getElementById('identifyCard');
+                card.style.display = 'block';
+
+                if (d.source === 'opencv_local' && d.target) {
+                    const t = d.target;
+                    detectedObject = { objeto: t.nombre, target_x: t.x, target_y: t.y, box: t.box };
+                    document.getElementById('identifyTitle').innerText = `${t.nombre} (${d.count} coincidencias)`;
+                    document.getElementById('identifyModel').innerText = "OpenCV CIELAB";
+                    document.getElementById('identifyDesc').innerText = `Comando ejecutado localmente para "${cmd}".`;
+                    if (!d.pointed_directly) await apuntarAObjetivo(t.x, t.y, t.nombre);
+                    else {
+                        document.getElementById('stepBadge').innerText = "Señalado";
+                        document.getElementById('instructionText').innerText = `Laser apuntando a: ${t.nombre}`;
+                    }
+                } else if (d.objeto) {
+                    detectedObject = { objeto: d.objeto, target_x: d.target_x, target_y: d.target_y, box: d.box };
+                    document.getElementById('identifyTitle').innerText = d.objeto;
+                    document.getElementById('identifyModel').innerText = d.model || "Gemini";
+                    document.getElementById('identifyDesc').innerText = d.descripcion || "";
+                    await apuntarDirectoOHibrido(d.target_x, d.target_y, d.objeto);
+                }
+            } catch (e) {
+                alert("Error comando: " + e.message);
+            }
+        }
+
+        function iniciarVoz() {
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRec) {
+                alert("Tu navegador no soporta reconocimiento de voz.");
+                return;
+            }
+            const rec = new SpeechRec();
+            rec.lang = 'es-MX';
+            const btn = document.getElementById('btnVoz');
+            btn.innerText = "Escuchando...";
+            rec.onresult = (event) => {
+                const txt = event.results[0][0].transcript;
+                document.getElementById('cmdInput').value = txt;
+                btn.innerText = "Voz";
+                enviarComando();
+            };
+            rec.onerror = () => { btn.innerText = "Voz"; };
+            rec.onend = () => { btn.innerText = "Voz"; };
+            rec.start();
+        }
+
+        // CONTROL DEL CUADRADO DE ÁREA SEGURA
+        const pad = document.getElementById('safePad');
+        const cursor = document.getElementById('laserCursor');
+        let draggingPad = false;
+        let lastPadSend = 0;
+
+        function uvACartesiano(u, v) {
+            const x = ((u - 0.5) * 10.0).toFixed(1);
+            const y = ((0.5 - v) * 10.0).toFixed(1);
+            return `${x}, ${y}`;
+        }
+
+        function irACoordenadaCartesiana() {
+            const cx = parseFloat(document.getElementById('inputCartX').value);
+            const cy = parseFloat(document.getElementById('inputCartY').value);
+            if (isNaN(cx) || isNaN(cy)) return;
+            const u = Math.max(0, Math.min(1, (cx / 10.0) + 0.5));
+            const v = Math.max(0, Math.min(1, 0.5 - (cy / 10.0)));
+            enviarCoordenadaPad(u, v, true);
+        }
+
+        function enviarCoordenadaPad(u, v, force = false) {
+            u = Math.max(0, Math.min(1, u));
+            v = Math.max(0, Math.min(1, v));
+            cursor.style.left = (u * 100) + '%';
+            cursor.style.top = (v * 100) + '%';
+            document.getElementById('ctrlXY').innerText = uvACartesiano(u, v);
+
+            const now = Date.now();
+            if (!force && now - lastPadSend < 65) return;
+            lastPadSend = now;
+
+            fetch('/api/esp32/move_norm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ u, v })
+            }).then(r => r.json()).then(actualizarEstadoCtrl).catch(() => {});
+        }
+
+        function manejarEventoPad(e, force = false) {
+            const rect = pad.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            enviarCoordenadaPad((clientX - rect.left) / rect.width, (clientY - rect.top) / rect.height, force);
+        }
+
+        pad.addEventListener('pointerdown', (e) => { draggingPad = true; manejarEventoPad(e, true); });
+        pad.addEventListener('pointermove', (e) => { if (draggingPad) manejarEventoPad(e, false); });
+        window.addEventListener('pointerup', () => { draggingPad = false; });
+
+        async function centrarAreaSegura() {
+            cursor.style.left = '50%';
+            cursor.style.top = '50%';
+            document.getElementById('ctrlXY').innerText = '0.0, 0.0';
+            const res = await fetch('/api/esp32/center', { method: 'POST' });
+            const d = await res.json();
+            actualizarEstadoCtrl(d);
+        }
+
+        async function toggleLaser() {
+            const res = await fetch('/api/esp32/laser', { method: 'POST' });
+            const data = await res.json();
+            const on = !!data.laser;
+            document.getElementById('btnLaserToggle').classList.toggle('on', on);
+            document.getElementById('btnLaserCtrl').classList.toggle('on', on);
+            document.getElementById('btnLaserToggle').innerText = on ? 'Laser: ON' : 'Laser: OFF';
+            document.getElementById('btnLaserCtrl').innerText = on ? 'Laser: ON' : 'Laser: OFF';
+        }
+
+        async function togglePatrulla() {
+            const res = await fetch('/api/esp32/rect', { method: 'POST' });
+            const d = await res.json();
+            actualizarEstadoCtrl(d);
+        }
+
+        async function cargarEstadoESP32() {
+            try {
+                const res = await fetch('/api/esp32/status');
+                const d = await res.json();
+                actualizarEstadoCtrl(d);
+            } catch (e) {}
+        }
+
+        function actualizarEstadoCtrl(d) {
+            if (!d || d.error) return;
+            if (d.cabeceo !== undefined) document.getElementById('ctrlC').innerText = d.cabeceo + '°';
+            if (d.rotacion !== undefined) document.getElementById('ctrlR').innerText = d.rotacion + '°';
+            if (d.cal) {
+                document.getElementById('padTL').innerText = `TL ${d.cal.cTL}°/${d.cal.rTL}°`;
+                document.getElementById('padTR').innerText = `TR ${d.cal.cTR}°/${d.cal.rTR}°`;
+                document.getElementById('padBL').innerText = `BL ${d.cal.cBL}°/${d.cal.rBL}°`;
+                document.getElementById('padBR').innerText = `BR ${d.cal.cBR}°/${d.cal.rBR}°`;
+            }
+            const btnP = document.getElementById('btnPatrulla');
+            if (btnP && d.rect !== undefined) {
+                btnP.innerText = d.rect ? 'Pausar Patrullaje' : 'Patrullar Perimetro';
+            }
+        }
+
+        // MODO JOYSTICK MANUAL PARA CAPTURAR LAS 4 ESQUINAS
+        const JOY_CORNERS = [
+            { key: "TL", label: "(-5, 5)" },
+            { key: "TR", label: "(5, 5)" },
+            { key: "BR", label: "(5, -5)" },
+            { key: "BL", label: "(-5, -5)" }
+        ];
+        let joyStep = 0;
+        let joyCal = {};
+        let joyCamCorners = [];
+        let joyTimer = null;
+        let joyDx = 0, joyDy = 0;
+
+        function reiniciarJoystick() {
+            joyStep = 0;
+            joyCal = {};
+            joyCamCorners = [];
+            registeredCornerAnims = [];
+            calibratedPolygon = null;
+            actualizarUIJoystick();
+        }
+
+        function actualizarUIJoystick() {
+            const c = JOY_CORNERS[joyStep];
+            if (!c) return;
+            document.getElementById('joyCornerLabel').innerText = `Esquina ${joyStep + 1}/4: ${c.label}`;
+            document.getElementById('btnJoyCapture').innerText = `Capturar ${c.label}`;
+            sincronizarBarrasEjes();
+            document.getElementById('stepBadge').innerText = `Ejes ${joyStep + 1}/4`;
+            document.getElementById('instructionText').innerText = `Ajusta Eje 1 y Eje 2 hacia ${c.label} y pulsa Capturar.`;
+        }
+
+        function initJoystick() {
+            sincronizarBarrasEjes();
+        }
+
+        function notificarESP32(text, beep = 'none') {
+            fetch('/api/esp32/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, beep })
+            }).catch(() => {});
+        }
+
+        async function capturarEsquinaJoystick() {
+            const c = JOY_CORNERS[joyStep];
+            if (!c) return;
+
+            notificarESP32(`Esquina ${c.label}`, 'confirm');
+
+            const det = await medirPosicionLaser();
+            const lx = det.detected ? det.x : (c.key.includes('L') ? 0.15 : 0.85);
+            const ly = det.detected ? det.y : (c.key.includes('T') ? 0.15 : 0.85);
+
+            joyCal[`c${c.key}`] = cabeceoActual;
+            joyCal[`r${c.key}`] = rotacionActual;
+            joyCamCorners.push([lx, ly]);
+
+            registeredCornerAnims.push({
+                x: lx, y: ly, label: c.label, startTime: Date.now()
+            });
+
+            joyStep++;
+            if (joyStep < 4) {
+                actualizarUIJoystick();
+                return;
+            }
+
+            // 4 esquinas capturadas -> guardar Homografia + ESP32 NVS y verificar
+            calibratedPolygon = joyCamCorners;
+            document.getElementById('stepBadge').innerText = "Guardando";
+            document.getElementById('instructionText').innerText = "Calculando Homografia 3x3 y guardando...";
+
+            await fetch('/api/calibrate_homography', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cam_corners: joyCamCorners, servo_corners: joyCal })
+            });
+            await fetch('/api/esp32/center', { method: 'POST' });
+
+            document.getElementById('stepBadge').innerText = "Verificado";
+            document.getElementById('instructionText').innerText = "Area Segura manual calibrada.";
+            cambiarVista('control');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initCamera();
+            initJoystick();
+        });
+    </script>
+</body>
+</html>

@@ -307,10 +307,7 @@ def api_identify_and_point(payload: ImagePayload):
         target_x = round((xmin + xmax) / 2.0, 4)
         target_y = round((ymin + ymax) / 2.0, 4)
 
-        try:
-            requests.post(f"{ESP32_URL}/api/disparo", timeout=1.5)
-        except Exception:
-            pass
+        _notificar_esp32(parsed.get("objeto", "Objeto"), "detect")
 
         otros = []
         for obj in parsed.get("otros_objetos", [])[:4]:
