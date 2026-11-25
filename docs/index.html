@@ -493,19 +493,23 @@
                 <div class="other-chips" id="otherChips"></div>
             </div>
 
-            <div class="card" style="padding:14px; margin-bottom:12px;">
-                <div style="display:flex; justify-content:space-between; font-size:0.78rem; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
-                    <span>Control Manual</span>
-                    <span id="joyAnglesText">Centro</span>
+            <div class="card" style="padding:18px; margin-bottom:14px; border-radius:20px; background:linear-gradient(180deg, #FFFFFF 0%, #F9F9FB 100%); box-shadow:0 8px 24px rgba(0,0,0,0.06); border:1px solid rgba(0,0,0,0.06);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:0.88rem; font-weight:700; color:var(--text-primary); letter-spacing:-0.01em;">Control de Torreta</div>
+                        <div id="espLiveBadge" style="font-size:0.72rem; font-weight:500; color:var(--text-secondary); margin-top:2px;">ESP32: Listo</div>
+                    </div>
+                    <span id="joyAnglesText" style="font-size:0.76rem; font-weight:600; color:var(--blue); background:rgba(0,122,255,0.1); padding:5px 10px; border-radius:999px;">Centro</span>
                 </div>
-                <div id="joySimBox" style="position:relative; width:100%; height:180px; border-radius:14px; background:#F2F2F7; border:1px solid rgba(0,0,0,0.08); overflow:hidden; touch-action:none;">
-                    <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(0,0,0,0.12);"></div>
-                    <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(0,0,0,0.12);"></div>
-                    <span style="position:absolute; top:6px; left:50%; transform:translateX(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Arriba</span>
-                    <span style="position:absolute; bottom:6px; left:50%; transform:translateX(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Abajo</span>
-                    <span style="position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Izq</span>
-                    <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:0.72rem; font-weight:600; color:#8E8E93;">Der</span>
-                    <div id="joySimDot" style="position:absolute; width:18px; height:18px; border-radius:50%; background:#007AFF; border:2.5px solid #fff; box-shadow:0 2px 8px rgba(0,122,255,0.5); left:50%; top:50%; transform:translate(-50%,-50%); transition:left 0.08s, top 0.08s;"></div>
+                <div id="joySimBox" style="position:relative; width:100%; height:200px; border-radius:16px; background:radial-gradient(circle at center, #FFFFFF 0%, #EFEFF4 100%); border:1px solid rgba(0,0,0,0.08); box-shadow:inset 0 2px 8px rgba(0,0,0,0.04); overflow:hidden; touch-action:none; cursor:crosshair;">
+                    <div style="position:absolute; left:50%; top:0; bottom:0; width:1px; background:rgba(0,0,0,0.08);"></div>
+                    <div style="position:absolute; top:50%; left:0; right:0; height:1px; background:rgba(0,0,0,0.08);"></div>
+                    <div style="position:absolute; left:50%; top:50%; width:56px; height:56px; border-radius:50%; border:1px dashed rgba(0,122,255,0.22); transform:translate(-50%,-50%); pointer-events:none;"></div>
+                    <span style="position:absolute; top:8px; left:50%; transform:translateX(-50%); font-size:0.7rem; font-weight:600; color:#8E8E93; letter-spacing:0.03em; text-transform:uppercase;">Arriba</span>
+                    <span style="position:absolute; bottom:8px; left:50%; transform:translateX(-50%); font-size:0.7rem; font-weight:600; color:#8E8E93; letter-spacing:0.03em; text-transform:uppercase;">Abajo</span>
+                    <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:0.7rem; font-weight:600; color:#8E8E93; letter-spacing:0.03em; text-transform:uppercase;">Izq</span>
+                    <span style="position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:0.7rem; font-weight:600; color:#8E8E93; letter-spacing:0.03em; text-transform:uppercase;">Der</span>
+                    <div id="joySimDot" style="position:absolute; width:22px; height:22px; border-radius:50%; background:linear-gradient(135deg, #0A84FF 0%, #0051D5 100%); border:3px solid #fff; box-shadow:0 4px 12px rgba(0,122,255,0.45); left:50%; top:50%; transform:translate(-50%,-50%); transition:left 0.08s, top 0.08s;"></div>
                 </div>
             </div>
 

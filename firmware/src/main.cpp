@@ -43,6 +43,7 @@ int baseCabeceoFiesta = 90;
 bool modoDisparo = false;
 unsigned long inicioDisparo = 0;
 unsigned long ultimoPasoDisparo = 0;
+unsigned long ultimoDisparoFinMs = 0;
 int pasoDisparo = 0;
 int baseCabeceoDisparo = 135;
 #define PIN_BUZZER    7   // Buzzer 2 pines (Pin 7)
@@ -480,72 +481,12 @@ void handleFiesta() {
     }
     bool activar = !server.hasArg("on") || server.arg("on") != "0";
     modoFiesta = activar;
-    // Lectura ultrasónica cada 120ms
-    if (millis() - ultimoPing >= 120) {
-        ultimoPing = millis();
-        digitalWrite(PIN_TRIG, LOW);
-        delayMicroseconds(2);
-        digitalWrite(PIN_TRIG, HIGH);
-        delayMicroseconds(10);
-        digitalWrite(PIN_TRIG, LOW);
-        long dur = pulseIn(PIN_ECHO, HIGH, 15000);
-        distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
-
-        static int conteoCerca = 0;
-        static unsigned long ultimoDisparoFinMs = 0;
-        if (distanciaCM >= 2 && distanciaCM <= 5) {
-            conteoCerca++;
-        } else {
-            conteoCerca = 0;
-        }
-        if (conteoCerca >= 2 && !modoDisparo && (millis() - ultimoDisparoFinMs > 3000)) {
-            modoDisparo = true;
-            inicioDisparo = millis();
-            ultimoPasoDisparo = 0;
-            pasoDisparo = 0;
-            baseCabeceoDisparo = constrain(anguloCabeceo, 98, 172);
-            conteoCerca = 0;
-        }
-        static unsigned long ultimaOledMs = 0;
-        if (millis() - ultimaOledMs >= 250) {
-            ultimaOledMs = millis();
-            dibujarRadarOled();
-        }
-    }
-
-    if (modoDisparo) {
-        if (millis() - inicioDisparo > 2200) {
-            modoDisparo = false;
-            ledcWriteTone(4, 0);
-            digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
-            moverCabeceoHW(baseCabeceoDisparo);
-        } else if (millis() - ultimoPasoDisparo >= 65) {
-            ultimoPasoDisparo = millis();
-            // Ráfaga en frecuencias de resonancia + ligero cabeceo vertical (±5°)
-            int fase = pasoDisparo % 4;
-            if (fase == 0) {
-                digitalWrite(PIN_LASER, HIGH);
-                ledcWriteTone(4, 2400);
-                moverCabeceoHW(baseCabeceoDisparo + 5);
-            } else if (fase == 1) {
-                ledcWriteTone(4, 1900);
-            } else if (fase == 2) {
-                digitalWrite(PIN_LASER, LOW);
-                ledcWriteTone(4, 1400);
-                moverCabeceoHW(baseCabeceoDisparo - 5);
-            } else {
-                ledcWriteTone(4, 0);
-            }
-            pasoDisparo++;
-        }
-    }
-
     if (modoFiesta) {
         inicioFiesta = millis();
         pasoFiesta = 0;
-        baseCabeceoFiesta = constrain(anguloCabeceo, 25, 155);
+        baseCabeceoFiesta = constrain(anguloCabeceo, 95, 170);
     } else {
-        noTone(PIN_BUZZER);
+        ledcWriteTone(CANAL_BUZZER, 0);
     }
     server.send(200, "application/json", jsonEstado());
 }
@@ -586,7 +527,8 @@ void handleMoveNorm() {
 
 void handleCenter() {
     modoRectangulo = false;
-    moverNormalizado(0.5f, 0.5f);
+    moverCabeceoHW(135);
+    moverRotacionHW(130);
     server.send(200, "application/json", jsonEstado());
 }
 
@@ -767,7 +709,6 @@ void loop() {
         distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
 
         static int conteoCerca = 0;
-        static unsigned long ultimoDisparoFinMs = 0;
         if (distanciaCM >= 2 && distanciaCM <= 5) {
             conteoCerca++;
         } else {
@@ -791,25 +732,26 @@ void loop() {
     if (modoDisparo) {
         if (millis() - inicioDisparo > 2200) {
             modoDisparo = false;
-            ledcWriteTone(4, 0);
+            ultimoDisparoFinMs = millis();
+            ledcWriteTone(CANAL_BUZZER, 0);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
             moverCabeceoHW(baseCabeceoDisparo);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga en frecuencias de resonancia + ligero cabeceo vertical (±5°)
+            // Ráfaga en frecuencias de resonancia + ligero cabeceo vertical (±5°) sin tocar rotación
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
-                ledcWriteTone(4, 2400);
+                ledcWriteTone(CANAL_BUZZER, 2400);
                 moverCabeceoHW(baseCabeceoDisparo + 5);
             } else if (fase == 1) {
-                ledcWriteTone(4, 1900);
+                ledcWriteTone(CANAL_BUZZER, 1900);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
-                ledcWriteTone(4, 1400);
+                ledcWriteTone(CANAL_BUZZER, 1400);
                 moverCabeceoHW(baseCabeceoDisparo - 5);
             } else {
-                ledcWriteTone(4, 0);
+                ledcWriteTone(CANAL_BUZZER, 0);
             }
             pasoDisparo++;
         }
@@ -818,12 +760,12 @@ void loop() {
     if (modoFiesta) {
         if (millis() - inicioFiesta > 5000) {
             modoFiesta = false;
-            noTone(PIN_BUZZER);
+            ledcWriteTone(CANAL_BUZZER, 0);
             moverCabeceoHW(baseCabeceoFiesta);
         } else if (millis() - ultimoPasoFiesta >= 180) {
             ultimoPasoFiesta = millis();
             const int notas[] = {523, 659, 784, 1046, 784, 659, 880, 1046};
-            tone(PIN_BUZZER, notas[pasoFiesta % 8], 140);
+            ledcWriteTone(CANAL_BUZZER, notas[pasoFiesta % 8]);
             int offset = (pasoFiesta % 2 == 0) ? 12 : -12;
             moverCabeceoHW(baseCabeceoFiesta + offset);
             pasoFiesta++;
@@ -849,10 +791,10 @@ void loop() {
     }
     */
 
-    if (modoRectangulo) {
-        if (millis() - ultimoPasoRect >= 25) {
+    if (modoRectangulo && !modoDisparo) {
+        if (millis() - ultimoPasoRect >= 30) {
             ultimoPasoRect = millis();
-            pasoPerimetro += 0.02f;
+            pasoPerimetro += 0.015f;
             if (pasoPerimetro >= 1.0f) {
                 pasoPerimetro = 0.0f;
                 ladoActual = (ladoActual % 4) + 1;
