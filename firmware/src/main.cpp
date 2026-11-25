@@ -510,21 +510,18 @@ void handleFiesta() {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
-            moverCabeceoHW(baseCabeceoDisparo);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz) + cabeceo vertical únicamente
+            // Ráfaga en frecuencias de resonancia sin mover servos
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
                 tone(PIN_BUZZER, 2400, 60);
-                moverCabeceoHW(baseCabeceoDisparo + 8);
             } else if (fase == 1) {
                 tone(PIN_BUZZER, 1900, 60);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
                 tone(PIN_BUZZER, 1400, 55);
-                moverCabeceoHW(baseCabeceoDisparo - 8);
             } else {
                 noTone(PIN_BUZZER);
             }
@@ -769,21 +766,18 @@ void loop() {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
-            moverCabeceoHW(baseCabeceoDisparo);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz) + cabeceo vertical únicamente
+            // Ráfaga en frecuencias de resonancia sin mover servos
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
                 tone(PIN_BUZZER, 2400, 60);
-                moverCabeceoHW(baseCabeceoDisparo + 8);
             } else if (fase == 1) {
                 tone(PIN_BUZZER, 1900, 60);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
                 tone(PIN_BUZZER, 1400, 55);
-                moverCabeceoHW(baseCabeceoDisparo - 8);
             } else {
                 noTone(PIN_BUZZER);
             }

@@ -1011,11 +1011,15 @@
                 const now = Date.now();
                 if (now - barThrottle < 55) return;
                 barThrottle = now;
-                fetch('/api/esp32/servo', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
-                }).catch(() => {});
+                if (location.port === '8443') {
+                    fetch('/api/esp32/servo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ cabeceo: cabeceoActual, rotacion: rotacionActual })
+                    }).catch(() => {});
+                } else {
+                    fetch(`${getEsp32Base()}/api/servo?cabeceo=${cabeceoActual}&rotacion=${rotacionActual}`, { method: 'POST' }).catch(() => {});
+                }
             };
             box.addEventListener('pointerdown', (e) => { dragging = true; box.setPointerCapture(e.pointerId); moveFromEvent(e); });
             box.addEventListener('pointermove', (e) => { if (dragging) moveFromEvent(e); });
