@@ -530,6 +530,7 @@
                     <input type="text" id="directEspUrl" class="cmd-input" placeholder="http://10.11.81.248" value="http://10.11.81.248">
                     <input type="password" id="directGeminiKey" class="cmd-input" placeholder="Gemini API Key (AIza...)">
                     <button class="btn btn-blue" onclick="guardarConfigDirecta()">Guardar Configuracion</button>
+                    <button class="btn btn-red" onclick="reiniciarEsp32()">Reiniciar ESP32</button>
                 </div>
             </div>
             <div class="card">
@@ -1032,6 +1033,11 @@
             localStorage.setItem('esp32_url', document.getElementById('directEspUrl').value.trim() || 'http://10.11.81.248');
             localStorage.setItem('gemini_key', document.getElementById('directGeminiKey').value.trim());
             alert('Configuracion guardada');
+        }
+        function reiniciarEsp32() {
+            const url = location.port === '8443' ? '/api/esp32/reset' : `${getEsp32Base()}/api/reset`;
+            fetch(url, { method: 'POST' }).catch(() => {});
+            alert('Reiniciando ESP32...');
         }
         function getEsp32Base() {
             return (localStorage.getItem('esp32_url') || 'http://10.11.81.248').replace(/\/$/, '');

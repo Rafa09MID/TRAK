@@ -455,7 +455,7 @@ void dibujarRadarOled() {
 }
 
 String jsonEstado() {
-    return String("{\"cabeceo\":") + anguloCabeceo +
+    return String("{\"fw_ver\":\"v2.1\",\"cabeceo\":") + anguloCabeceo +
            ",\"rotacion\":" + anguloRotacion +
            ",\"u\":" + String(normU, 3) +
            ",\"v\":" + String(normV, 3) +
@@ -545,6 +545,12 @@ void handleDisparo() {
     ultimoPasoDisparo = 0;
     pasoDisparo = 0;
     server.send(200, "application/json", jsonEstado());
+}
+
+void handleReset() {
+    server.send(200, "application/json", "{\"ok\":true}");
+    delay(200);
+    ESP.restart();
 }
 
 void handleRoot() { server.send(200, "text/html", INDEX_HTML); }
@@ -706,6 +712,7 @@ void setup() {
     server.on("/api/servo", HTTP_POST, handleSetServo);
     server.on("/api/fiesta", HTTP_POST, handleFiesta);
     server.on("/api/disparo", HTTP_POST, handleDisparo);
+    server.on("/api/reset", HTTP_POST, handleReset);
     server.on("/api/move_norm", HTTP_POST, handleMoveNorm);
     server.on("/api/center", HTTP_POST, handleCenter);
     server.on("/api/safe_area", HTTP_POST, handleSafeArea);
