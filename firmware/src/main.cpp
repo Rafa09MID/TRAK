@@ -491,12 +491,20 @@ void handleFiesta() {
         long dur = pulseIn(PIN_ECHO, HIGH, 15000);
         distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
 
-        if (distanciaCM > 1 && distanciaCM <= 10 && !modoDisparo) {
+        static int conteoCerca = 0;
+        static unsigned long ultimoDisparoFinMs = 0;
+        if (distanciaCM >= 2 && distanciaCM <= 5) {
+            conteoCerca++;
+        } else {
+            conteoCerca = 0;
+        }
+        if (conteoCerca >= 2 && !modoDisparo && (millis() - ultimoDisparoFinMs > 3000)) {
             modoDisparo = true;
             inicioDisparo = millis();
             ultimoPasoDisparo = 0;
             pasoDisparo = 0;
             baseCabeceoDisparo = constrain(anguloCabeceo, 98, 172);
+            conteoCerca = 0;
         }
         static unsigned long ultimaOledMs = 0;
         if (millis() - ultimaOledMs >= 250) {
@@ -757,12 +765,20 @@ void loop() {
         long dur = pulseIn(PIN_ECHO, HIGH, 15000);
         distanciaCM = (dur > 0) ? (int)(dur * 0.034f / 2.0f) : 999;
 
-        if (distanciaCM > 1 && distanciaCM <= 10 && !modoDisparo) {
+        static int conteoCerca = 0;
+        static unsigned long ultimoDisparoFinMs = 0;
+        if (distanciaCM >= 2 && distanciaCM <= 5) {
+            conteoCerca++;
+        } else {
+            conteoCerca = 0;
+        }
+        if (conteoCerca >= 2 && !modoDisparo && (millis() - ultimoDisparoFinMs > 3000)) {
             modoDisparo = true;
             inicioDisparo = millis();
             ultimoPasoDisparo = 0;
             pasoDisparo = 0;
             baseCabeceoDisparo = constrain(anguloCabeceo, 98, 172);
+            conteoCerca = 0;
         }
         static unsigned long ultimaOledMs = 0;
         if (millis() - ultimaOledMs >= 250) {
