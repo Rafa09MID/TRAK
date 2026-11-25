@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <WebServer.h>
+#include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <ArduinoOTA.h>
 #include <Preferences.h>
@@ -19,9 +20,9 @@ String wifiPassPrimary = "12345678";
 WiFiMulti wifiMulti;
 unsigned long ultimoCheckWifi = 0;
 
-// Red Wi-Fi propia de respaldo
-const char* AP_SSID       = "ESP32-Laser-Gimbal";
-const char* AP_PASS       = "12345678";
+// Red Wi-Fi propia abierta ("Trak", sin contraseña, con portal cautivo)
+const char* AP_SSID       = "Trak";
+DNSServer dnsServer;
 
 // Definición de pines
 #define PIN_CABECEO   39  // Servo cabeceo (Pin 39)
@@ -505,7 +506,29 @@ void handleReset() {
     ESP.restart();
 }
 
-void handleRoot() { server.send(200, "text/html", INDEX_HTML); }
+void handleCaptivePortal() {
+    String txt = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Guia TRAK</title>"
+                 "<style>body{font-family:monospace,sans-serif;max-width:600px;margin:24px auto;padding:16px;line-height:1.5;background:#fff;color:#111}h1{font-size:1.2rem;border-bottom:1px solid #ccc;padding-bottom:6px}ol{padding-left:20px}</style></head><body>"
+                 "<h1>TRAK - Guia de Uso y Conexion</h1>"
+                 "<p>El sistema TRAK combina un gimbal de 2 ejes, radar ultrasonico y deteccion inteligente con camara.</p>"
+                 "<h2>Pasos para utilizarlo:</h2><ol>"
+                 "<li>Activa el hotspot de tu celular con el nombre <b>rafa</b> y contrasena <b>12345678</b>.</li>"
+                 "<li>Desconectate de la red Wi-Fi abierta <b>Trak</b> (solo es guia) y deja tu celular con datos moviles y su hotspot encendido.</li>"
+                 "<li>El gimbal se conectara automaticamente a tu hotspot (IP: " + WiFi.localIP().toString() + " o esp32-laser.local).</li>"
+                 "<li>Abre en Chrome: <b>https://rafa09mid.github.io/TRAK/</b></li>"
+                 "<li>En Chrome (candado -&gt; Configuracion del sitio) permite <b>Contenido no seguro</b> y <b>Camara</b>.</li>"
+                 "<li>Listo: usa el panel tactil para mover la torreta, <b>Patrullar Perimetro</b> o <b>Identificar con IA</b>.</li>"
+                 "</ol></body></html>";
+    server.send(200, "text/html", txt);
+}
+
+void handleRoot() {
+    if (server.hostHeader().indexOf("192.168.4.1") >= 0) {
+        handleCaptivePortal();
+        return;
+    }
+    server.send(200, "text/html", INDEX_HTML);
+}
 void handleStatus() { server.send(200, "application/json", jsonEstado()); }
 
 void handleSetServo() {
@@ -655,12 +678,17 @@ void setup() {
     WiFi.persistent(false);
     WiFi.mode(WIFI_AP_STA);
     WiFi.setTxPower(WIFI_POWER_15dBm);
-    WiFi.softAP(AP_SSID, AP_PASS);
+    WiFi.softAP(AP_SSID); // Red abierta "Trak" sin contraseña
+    dnsServer.start(53, "*", WiFi.softAPIP());
     wifiMulti.addAP(wifiSsidPrimary.c_str(), wifiPassPrimary.c_str());
     wifiMulti.run();
 
-    // Servidor Web
+    // Servidor Web + Portal Cautivo + alias de endpoints
     server.on("/", HTTP_GET, handleRoot);
+    server.on("/generate_24", HTTP_GET, handleCaptivePortal);
+    server.on("/hotspot-detect.html", HTTP_GET, handleCaptivePortal);
+    server.on("/ncsi.txt", HTTP_GET, handleCaptivePortal);
+    server.on("/connecttest.txt", HTTP_GET, handleCaptivePortal);
     server.on("/api/status", HTTP_GET, handleStatus);
     server.on("/api/servo", HTTP_POST, handleSetServo);
     server.on("/api/fiesta", HTTP_POST, handleFiesta);
@@ -672,7 +700,10 @@ void setup() {
     server.on("/api/notify", HTTP_POST, handleNotify);
     server.on("/api/wifi_config", HTTP_POST, handleWifiConfig);
     server.on("/api/laser/toggle", HTTP_POST, handleToggleLaser);
+    server.on("/api/laser", HTTP_POST, handleToggleLaser);
     server.on("/api/rect/toggle", HTTP_POST, handleToggleRect);
+    server.on("/api/rect", HTTP_POST, handleToggleRect);
+    server.onNotFound(handleCaptivePortal);
     server.enableCORS(true);
     server.begin();
 
@@ -685,6 +716,7 @@ void setup() {
 }
 
 void loop() {
+    dnsServer.processNextRequest();
     ArduinoOTA.handle();
     server.handleClient();
     actualizarBuzzer();
