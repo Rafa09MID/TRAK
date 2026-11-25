@@ -496,7 +496,11 @@ void handleFiesta() {
             ultimoPasoDisparo = 0;
             pasoDisparo = 0;
         }
-        dibujarRadarOled();
+        static unsigned long ultimaOledMs = 0;
+        if (millis() - ultimaOledMs >= 250) {
+            ultimaOledMs = millis();
+            dibujarRadarOled();
+        }
     }
 
     if (modoDisparo) {
@@ -504,7 +508,6 @@ void handleFiesta() {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
-            dibujarRadarOled();
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
             // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz)
@@ -521,7 +524,6 @@ void handleFiesta() {
                 noTone(PIN_BUZZER);
             }
             pasoDisparo++;
-            dibujarRadarOled();
         }
     }
 
@@ -749,7 +751,11 @@ void loop() {
             ultimoPasoDisparo = 0;
             pasoDisparo = 0;
         }
-        dibujarRadarOled();
+        static unsigned long ultimaOledMs = 0;
+        if (millis() - ultimaOledMs >= 250) {
+            ultimaOledMs = millis();
+            dibujarRadarOled();
+        }
     }
 
     if (modoDisparo) {
@@ -757,7 +763,6 @@ void loop() {
             modoDisparo = false;
             noTone(PIN_BUZZER);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
-            dibujarRadarOled();
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
             // Ráfaga más fuerte en frecuencias de resonancia (2400 -> 1900 -> 1400 Hz)
@@ -774,7 +779,6 @@ void loop() {
                 noTone(PIN_BUZZER);
             }
             pasoDisparo++;
-            dibujarRadarOled();
         }
     }
 
