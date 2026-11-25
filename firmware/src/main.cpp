@@ -508,7 +508,7 @@ void handleFiesta() {
     if (modoDisparo) {
         if (millis() - inicioDisparo > 2200) {
             modoDisparo = false;
-            noTone(PIN_BUZZER);
+            ledcWriteTone(4, 0);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
@@ -516,14 +516,14 @@ void handleFiesta() {
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
-                tone(PIN_BUZZER, 2400, 60);
+                ledcWriteTone(4, 2400);
             } else if (fase == 1) {
-                tone(PIN_BUZZER, 1900, 60);
+                ledcWriteTone(4, 1900);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
-                tone(PIN_BUZZER, 1400, 55);
+                ledcWriteTone(4, 1400);
             } else {
-                noTone(PIN_BUZZER);
+                ledcWriteTone(4, 0);
             }
             pasoDisparo++;
         }
@@ -771,7 +771,7 @@ void loop() {
     if (modoDisparo) {
         if (millis() - inicioDisparo > 2200) {
             modoDisparo = false;
-            noTone(PIN_BUZZER);
+            ledcWriteTone(4, 0);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
@@ -779,14 +779,14 @@ void loop() {
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
-                tone(PIN_BUZZER, 2400, 60);
+                ledcWriteTone(4, 2400);
             } else if (fase == 1) {
-                tone(PIN_BUZZER, 1900, 60);
+                ledcWriteTone(4, 1900);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
-                tone(PIN_BUZZER, 1400, 55);
+                ledcWriteTone(4, 1400);
             } else {
-                noTone(PIN_BUZZER);
+                ledcWriteTone(4, 0);
             }
             pasoDisparo++;
         }
