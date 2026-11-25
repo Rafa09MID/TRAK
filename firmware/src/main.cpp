@@ -510,18 +510,21 @@ void handleFiesta() {
             modoDisparo = false;
             ledcWriteTone(4, 0);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+            moverCabeceoHW(baseCabeceoDisparo);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga en frecuencias de resonancia sin mover servos
+            // Ráfaga en frecuencias de resonancia + ligero cabeceo vertical (±5°)
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
                 ledcWriteTone(4, 2400);
+                moverCabeceoHW(baseCabeceoDisparo + 5);
             } else if (fase == 1) {
                 ledcWriteTone(4, 1900);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
                 ledcWriteTone(4, 1400);
+                moverCabeceoHW(baseCabeceoDisparo - 5);
             } else {
                 ledcWriteTone(4, 0);
             }
@@ -773,18 +776,21 @@ void loop() {
             modoDisparo = false;
             ledcWriteTone(4, 0);
             digitalWrite(PIN_LASER, estadoLaser ? HIGH : LOW);
+            moverCabeceoHW(baseCabeceoDisparo);
         } else if (millis() - ultimoPasoDisparo >= 65) {
             ultimoPasoDisparo = millis();
-            // Ráfaga en frecuencias de resonancia sin mover servos
+            // Ráfaga en frecuencias de resonancia + ligero cabeceo vertical (±5°)
             int fase = pasoDisparo % 4;
             if (fase == 0) {
                 digitalWrite(PIN_LASER, HIGH);
                 ledcWriteTone(4, 2400);
+                moverCabeceoHW(baseCabeceoDisparo + 5);
             } else if (fase == 1) {
                 ledcWriteTone(4, 1900);
             } else if (fase == 2) {
                 digitalWrite(PIN_LASER, LOW);
                 ledcWriteTone(4, 1400);
+                moverCabeceoHW(baseCabeceoDisparo - 5);
             } else {
                 ledcWriteTone(4, 0);
             }
