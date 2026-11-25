@@ -1396,12 +1396,37 @@
             document.getElementById('instructionText').innerText = "Identificando objetos en vision...";
 
             try {
-                const res = await fetch('/api/identify_and_point', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_base64: capturarFrameBase64(640) })
-                });
-                const d = await res.json();
+                let d;
+                if (location.port === '8443') {
+                    const res = await fetch('/api/identify_and_point', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image_base64: capturarFrameBase64(640) })
+                    });
+                    d = await res.json();
+                } else {
+                    const gKey = localStorage.getItem('gemini_key') || '';
+                    if (!gKey) {
+                        alert('Guarda tu Gemini API Key en Ajustes primero.');
+                        return;
+                    }
+                    const b64 = capturarFrameBase64(640).split(',')[1];
+                    const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [
+                                { text: 'Identifica el objeto principal en esta imagen. Responde SOLO JSON valido: {"objeto":"nombre corto","descripcion":"1 frase"}' },
+                                { inline_data: { mime_type: 'image/jpeg', data: b64 } }
+                            ]}]
+                        })
+                    });
+                    const gJson = await gRes.json();
+                    const rawTxt = (gJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}').replace(/```json|```/g, '').trim();
+                    d = JSON.parse(rawTxt);
+                    d.model = 'gemini-2.0-flash';
+                    fetch(`${getEsp32Base()}/api/notify?text=${encodeURIComponent(d.objeto || 'Objeto')}&beep=detect`, { method: 'POST' }).catch(() => {});
+                }
                 if (d.error) {
                     alert("Error IA: " + d.error);
                     actualizarUIEsquinas();
