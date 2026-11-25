@@ -1773,14 +1773,23 @@
 
         function actualizarEstadoCtrl(d) {
             if (!d || d.error) return;
+            const badge = document.getElementById('espLiveBadge');
+            if (badge) badge.innerText = `ESP32 Conectado (${d.ip || 'OK'})`;
             if (d.cabeceo !== undefined && d.rotacion !== undefined) {
                 cabeceoActual = d.cabeceo;
                 rotacionActual = d.rotacion;
                 sincronizarBarrasEjes();
             }
+            if (d.laser !== undefined) {
+                const on = !!d.laser;
+                const b2 = document.getElementById('btnLaserCtrl');
+                if (b2) { b2.classList.toggle('on', on); b2.innerText = on ? 'Laser: ON' : 'Laser: OFF'; }
+            }
             const btnP = document.getElementById('btnPatrulla');
             if (btnP && d.rect !== undefined) {
-                btnP.innerText = d.rect ? 'Pausar Patrullaje' : 'Patrullar Perimetro';
+                const active = !!d.rect;
+                btnP.innerText = active ? 'Pausar Patrulla' : 'Patrullar Perimetro';
+                btnP.className = active ? 'btn btn-red btn-full' : 'btn btn-green btn-full';
             }
         }
 
