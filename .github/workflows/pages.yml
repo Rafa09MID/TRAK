@@ -1,0 +1,31 @@
+name: Deploy TRAK to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inject GEMINI_API_KEY into docs/index.html
+        env:
+          GKEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 -c "import os; p='docs/index.html'; s=open(p).read(); k=os.environ.get('GKEY',''); open(p,'w').write(s.replace(\"localStorage.getItem('gemini_key') || ''\", f\"localStorage.getItem('gemini_key') || '{k}'\"))"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
